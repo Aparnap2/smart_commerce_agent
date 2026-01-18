@@ -7,6 +7,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:feature": "pnpm run test -- --testPathPattern=features",
     "test:e2e": "pnpm run test -- --testPathPattern=e2e",
+    "test:ecomm": "pnpm run test -- --testPathPattern=test_ecomm_agent.test",
     "test:load": "pnpm run test -- --testPathPattern=load",
     "test:all": "pnpm run test -- --coverage",
     "test:report": "pnpm run test:all && node scripts/generate-report.js",
