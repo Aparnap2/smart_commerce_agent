@@ -8,9 +8,9 @@
  * Query routing logic determines which search strategy to use.
  */
 
-import { getSupabaseDatabase } from '../supabase/client.js';
-import { generateQueryEmbedding } from '../services/user-prefs.js';
-import { env } from '../env.js';
+import { getSupabaseDatabase } from '../supabase/client';
+import { generateQueryEmbedding } from '../services/user-prefs';
+import { env } from '../env';
 
 // ============================================================================
 // Types and Interfaces

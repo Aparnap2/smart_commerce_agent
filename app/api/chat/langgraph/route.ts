@@ -14,8 +14,8 @@ import {
   checkRedisHealth,
   getCheckpointManager,
   logger,
-} from '@/lib/redis/index.js';
-import { env } from '@/lib/env.js';
+} from '@/lib/redis';
+import { env } from '@/lib/env';
 
 /**
  * Define the state schema for the graph

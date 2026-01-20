@@ -7,8 +7,8 @@
  * - Updates preferences based on conversation context
  */
 
-import { getSupabaseDatabase, UserEmbeddingRecord } from '../supabase/client.js';
-import { env } from '../env.js';
+import { getSupabaseDatabase, UserEmbeddingRecord } from '../supabase/client';
+import { env } from '../env';
 
 // ============================================================================
 // Types and Interfaces

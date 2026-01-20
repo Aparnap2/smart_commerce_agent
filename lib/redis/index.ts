@@ -11,7 +11,7 @@ export {
   closeRedisConnection,
   isRedisAvailable,
   type RedisConfig,
-} from './client.js';
+} from './client';
 
 // Checkpoint Manager
 export {
@@ -19,7 +19,7 @@ export {
   getCheckpointManager,
   type CheckpointData,
   type CheckpointMetadata,
-} from './checkpoint-manager.js';
+} from './checkpoint-manager';
 
 // LangGraph Integration
 export {
@@ -28,7 +28,7 @@ export {
   createCheckpointSaver,
   getDefaultCheckpointSaver,
   type RedisCheckpointMetadata,
-} from './langgraph-checkpoint.js';
+} from './langgraph-checkpoint';
 
 // Logger (internal use)
-export { logger } from './logger.js';
+export { logger } from './logger';

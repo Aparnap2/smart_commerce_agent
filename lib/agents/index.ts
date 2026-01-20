@@ -8,7 +8,7 @@
  */
 
 // State definitions
-export * from './state.js';
+export * from './state';
 
 // Supervisor agent
 export {
@@ -16,7 +16,7 @@ export {
   createDefaultSupervisorGraph,
   SupervisorAgent,
   createSupervisorAgent,
-} from './supervisor.js';
+} from './supervisor';
 
 // Refund agent (with Stripe integration)
 export {
@@ -29,7 +29,7 @@ export {
   initiateRefundSchema,
   validateRefundSchema,
   executeRefundSchema,
-} from './refund.js';
+} from './refund';
 
 // Tool agent (with hybrid search)
 export {
@@ -39,7 +39,7 @@ export {
   createToolAgent,
   type ChartDataPoint,
   type ChartConfig,
-} from './tool.js';
+} from './tool';
 
 // UI agent (with streaming)
 export {
@@ -50,7 +50,7 @@ export {
   createSSEStream,
   type StreamResponse,
   type UIState,
-} from './ui.js';
+} from './ui';
 
 /**
  * Agent type for routing decisions.

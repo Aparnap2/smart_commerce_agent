@@ -20,10 +20,10 @@ import {
   RefundStatus,
   type RefundResult,
   type PaymentIntentInfo,
-} from './client.js';
+} from './client';
 
 // Re-export for convenience
-export type { RefundResult } from './client.js';
+export type { RefundResult } from './client';
 
 // ============================================================================
 // Custom Exception Types

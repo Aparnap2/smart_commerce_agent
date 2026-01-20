@@ -15,8 +15,8 @@ import {
   closeRedisConnection,
   checkRedisHealth,
   isRedisConfigured,
-} from './config.js';
-import { AgentState } from '../agents/state.js';
+} from './config';
+import { AgentState } from '../agents/state';
 
 /**
  * Checkpoint key prefix for LangGraph state

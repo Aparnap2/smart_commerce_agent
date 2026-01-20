@@ -23,7 +23,7 @@ import type {
   UIState,
   ToolResult,
   QueryContext,
-} from './state.js';
+} from './state';
 
 /**
  * UI agent annotation for state management.

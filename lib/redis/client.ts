@@ -4,7 +4,7 @@
  */
 
 import Redis from 'ioredis';
-import { logger } from './logger.js';
+import { logger } from './logger';
 
 // Configuration interface for Redis connection
 export interface RedisConfig {

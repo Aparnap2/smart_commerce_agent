@@ -3,8 +3,8 @@
  * Manages LangGraph state persistence in Redis with TTL support
  */
 
-import { getRedisClient, type Redis } from './client.js';
-import { logger } from './logger.js';
+import { getRedisClient, type Redis } from './client';
+import { logger } from './logger';
 
 // Key prefixes for checkpoint storage
 const THREAD_PREFIX = 'thread:';

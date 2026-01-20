@@ -9,9 +9,9 @@ import type {
   SerializedCheckpoint,
   ChannelLogs,
 } from '@langchain/langgraph';
-import { getRedisClient, type Redis } from './client.js';
-import { CheckpointManager, getCheckpointManager } from './checkpoint-manager.js';
-import { logger } from './logger.js';
+import { getRedisClient, type Redis } from './client';
+import { CheckpointManager, getCheckpointManager } from './checkpoint-manager';
+import { logger } from './logger';
 
 // Type for checkpoint metadata
 export interface RedisCheckpointMetadata {

@@ -24,13 +24,13 @@ import {
   RefundValidationException,
   RefundNotFoundException,
   DEFAULT_REFUND_POLICY,
-} from '../stripe/refund.js';
+} from '../stripe/refund';
 import {
   getPaymentIntent,
   calculateRefundableAmount,
   formatAmount,
   type PaymentIntentInfo,
-} from '../stripe/client.js';
+} from '../stripe/client';
 
 // ============================================================================
 // State Definition

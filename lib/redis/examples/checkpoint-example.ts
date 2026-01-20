@@ -10,8 +10,8 @@ import {
   RedisCheckpointSaver,
   MemoryCheckpointSaver,
   logger,
-} from '../index.js';
-import { getRedisClient } from '../client.js';
+} from '../index';
+import { getRedisClient } from '../client';
 import type { Checkpoint, CheckpointSaver } from '@langchain/langgraph';
 
 /**

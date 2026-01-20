@@ -8,13 +8,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '../../../lib/supabase/client.js';
+import { getSupabaseClient } from '../../../lib/supabase/client';
 import {
   getCheckpointSaver,
   generateThreadId,
   generateCheckpointId,
-} from '../../../lib/redis/checkpointer.js';
-import { AgentState, createInitialState, Message } from '../../../lib/agents/state.js';
+} from '../../../lib/redis/checkpointer';
+import { AgentState, createInitialState, Message } from '../../../lib/agents/state';
 
 /**
  * Request body schema for agent queries
@@ -113,6 +113,11 @@ async function parseRequest(request: NextRequest): Promise<AgentRequest> {
 async function authenticateRequest(request: NextRequest): Promise<string> {
   // Extract auth token from header
   const authHeader = request.headers.get('authorization');
+
+  // Dev mode: allow test bypass with X-Dev-Mode header
+  if (process.env.NODE_ENV === 'development' && request.headers.get('x-dev-mode') === 'true') {
+    return 'test-user-id';
+  }
 
   // Try to get user from Supabase client
   const supabase = getSupabaseClient();

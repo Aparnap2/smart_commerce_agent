@@ -6,7 +6,7 @@
  */
 
 import { createClient, SupabaseClient, SupabaseClientOptions } from '@supabase/supabase-js';
-import { env } from '../env.js';
+import { env } from '../env';
 
 // ============================================================================
 // Environment Variable Types
@@ -444,10 +444,3 @@ export function getSupabaseDatabase(): SupabaseDatabase {
 
   return _databaseInstance;
 }
-
-// ============================================================================
-// Re-export for convenience
-// ============================================================================
-
-export { getSupabaseClient, getSupabaseAdminClient };
-export default getSupabaseClient;

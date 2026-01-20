@@ -25,11 +25,11 @@ import type {
   AgentState,
   IntentClassification,
   QueryContext,
-} from './state.js';
+} from './state';
 import {
   IntentTypeSchema,
   createInitialState,
-} from './state.js';
+} from './state';
 
 /**
  * Supervisor configuration constants.

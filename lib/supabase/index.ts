@@ -15,7 +15,7 @@ export {
   type UserEmbeddingRecord,
   type ProductSearchRecord,
   type OrderSearchRecord,
-} from './supabase/client.js';
+} from './client';
 
 // Hybrid Search
 export {
@@ -27,7 +27,7 @@ export {
   type SearchOptions,
   type SearchResponse,
   type SearchContext,
-} from './search/hybrid.js';
+} from './search/hybrid';
 
 // User Preferences
 export {
@@ -47,4 +47,4 @@ export {
   type PreferenceResult,
   type PreferenceQueryResult,
   type ConversationContext,
-} from './services/user-prefs.js';
+} from './services/user-prefs';

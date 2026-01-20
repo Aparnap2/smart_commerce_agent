@@ -23,7 +23,7 @@ import type {
   ToolExecutionState,
   ToolResult,
   QueryContext,
-} from './state.js';
+} from './state';
 
 /**
  * Tool agent annotation for state management.
