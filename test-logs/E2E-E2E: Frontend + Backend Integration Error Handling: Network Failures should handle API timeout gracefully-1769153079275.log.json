@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-01-23T07:24:39.273Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Network Failures should handle API timeout gracefully",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:39.274Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Network Failures should handle API timeout gracefully",
+    "message": "Testing API timeout handling"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:39.274Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Network Failures should handle API timeout gracefully",
+    "message": "API timeout test configured"
+  }
+]

@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2026-01-23T07:24:38.887Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:38.888Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "Testing PostgreSQL connection"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:38.911Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "PostgreSQL connection failed",
+    "error": "password authentication failed for user \"vercel_user\""
+  }
+]

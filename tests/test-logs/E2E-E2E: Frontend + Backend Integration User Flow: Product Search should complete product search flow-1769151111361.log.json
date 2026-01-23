@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.352Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.353Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Testing product search user flow"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.360Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Product search flow failed",
+    "error": "page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"networkidle\"\u001b[22m\n"
+  }
+]

@@ -72,6 +72,10 @@ model Order {
   paymentStatus   String?   // Added for e-commerce
   shippingAddress String?   // Added for e-commerce
   trackingNumber  String?   // Added for e-commerce
+
+  // Refund relations
+  refunds         Refund[]
+  orderRefund     OrderRefund?
 }
 
 model SupportTicket {

@@ -1,0 +1,66 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:41.369Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:41.371Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Loading dashboard page"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:41.378Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Network request",
+    "method": "GET",
+    "url": "http://localhost:3000/dashboard",
+    "resourceType": "document"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.320Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Network response",
+    "status": 500,
+    "url": "http://localhost:3000/dashboard"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.328Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Browser console",
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.840Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Page loaded",
+    "url": "http://localhost:3000/dashboard"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.854Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Page title",
+    "title": ""
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.894Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Dashboard elements found",
+    "count": 0
+  },
+  {
+    "timestamp": "2026-01-23T12:37:42.895Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Dashboard page loaded successfully"
+  }
+]

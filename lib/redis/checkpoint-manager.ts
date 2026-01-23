@@ -196,35 +196,36 @@ export class CheckpointManager {
       const beforeData = await this.client.get(this.checkpointKey(threadId, before));
       if (beforeData) {
         const checkpoint = deserialize<CheckpointData>(beforeData);
-        ids = await this.client.zrangebyscorewithscores(
+        const rawIds = await this.client.call('ZRANGE',
           this.threadIndexKey(threadId),
           '-inf',
           checkpoint.createdAt,
+          'BYSCORE',
+          'WITHSCORES',
           'LIMIT',
           0,
           limit + 1
-        );
+        ) as [string, number][];
+        ids = rawIds.map(([value, score]) => ({ value, score }));
         // Remove the 'before' checkpoint itself
         ids = ids.filter((item) => item.value !== before);
       } else {
-        ids = await this.client.zrevrange(
+        const rawIds = await this.client.call('ZREVRANGE',
           this.threadIndexKey(threadId),
           0,
           limit - 1,
           'WITHSCORES'
-        ) as Array<{ value: string; score: number }>;
+        ) as [string, number][];
+        ids = rawIds.map(([value, score]) => ({ value, score }));
       }
     } else {
-      const rawIds = await this.client.zrevrange(
+      const rawIds = await this.client.call('ZREVRANGE',
         this.threadIndexKey(threadId),
         0,
         limit - 1,
         'WITHSCORES'
-      );
-      ids = rawIds.map((item, index) => ({
-        value: item,
-        score: parseFloat(rawIds[index + 1] as string) ?? 0,
-      })) as Array<{ value: string; score: number }>;
+      ) as [string, number][];
+      ids = rawIds.map(([value, score]) => ({ value, score }));
     }
 
     return ids.map((item) => ({
@@ -239,11 +240,11 @@ export class CheckpointManager {
    * @returns Latest checkpoint ID or null
    */
   async getLatestCheckpointId(threadId: string): Promise<string | null> {
-    const result = await this.client.zrevrange(
+    const result = await this.client.call('ZREVRANGE',
       this.threadIndexKey(threadId),
       0,
       0
-    );
+    ) as string[];
     return result[0] ?? null;
   }
 

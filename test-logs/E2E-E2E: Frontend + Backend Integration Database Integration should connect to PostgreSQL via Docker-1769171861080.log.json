@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:41.048Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:41.050Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "Testing PostgreSQL connection"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:41.079Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to PostgreSQL via Docker",
+    "message": "PostgreSQL connection failed",
+    "error": "connect ECONNREFUSED 127.0.0.1:5432"
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-01-23T07:25:00.488Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load dashboard within 3 seconds",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T07:25:00.489Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load dashboard within 3 seconds",
+    "message": "Testing dashboard load performance"
+  },
+  {
+    "timestamp": "2026-01-23T07:25:00.493Z",
+    "level": "WARN",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load dashboard within 3 seconds",
+    "message": "Performance test skipped"
+  }
+]

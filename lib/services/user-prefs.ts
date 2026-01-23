@@ -5,9 +5,11 @@
  * - Generates embeddings using local ML models
  * - Stores/retrieves embeddings from pgvector
  * - Updates preferences based on conversation context
+ *
+ * Uses PostgreSQL with pgvector (Supabase removed)
  */
 
-import { getSupabaseDatabase, UserEmbeddingRecord } from '../supabase/client';
+import { queryDatabase } from '../tools/database';
 import { env } from '../env';
 
 // ============================================================================
@@ -20,64 +22,66 @@ import { env } from '../env';
 export type PreferenceContextType =
   | 'product_search'
   | 'order_inquiry'
-  | 'ticket_create'
+  | 'ticket_lookup'
   | 'general_support'
-  | 'recommendation'
-  | 'browsing';
+  | 'recommendation';
 
 /**
- * Embedding generation result
+ * User embedding record
+ */
+export interface UserEmbeddingRecord {
+  id: string;
+  user_id: string;
+  embedding: number[];
+  query_text: string;
+  context_type: string;
+  context_id?: string;
+  created_at: string;
+}
+
+/**
+ * Result of embedding generation
  */
 export interface EmbeddingResult {
   embedding: number[];
   model: string;
   dimensions: number;
-  error?: Error;
+  error?: string;
 }
 
 /**
- * Preference storage result
+ * Result of preference retrieval
  */
 export interface PreferenceResult {
-  success: boolean;
-  embeddingId?: string;
-  error?: Error;
+  preferences: UserEmbeddingRecord[];
+  similar_count: number;
+  error?: string;
 }
 
 /**
- * Preference query result
+ * Query result for preferences
  */
 export interface PreferenceQueryResult {
-  preferences: UserEmbeddingRecord[];
-  similarCount: number;
+  data: UserEmbeddingRecord[];
   error?: Error;
 }
 
-/**
- * Conversation context for preference updates
- */
-export interface ConversationContext {
-  userId: string;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  currentIntent?: string;
-  lastQuery?: string;
-}
-
 // ============================================================================
-// Embedding Model Configuration
+// Configuration
 // ============================================================================
 
-// 384-dimensional embeddings (all-MiniLM-L6-v2 compatible)
-const EMBEDDING_DIMENSIONS = 384;
-const DEFAULT_EMBEDDING_MODEL = 'all-MiniLM-L6-v2';
-
 /**
- * Check if embedding model is available
+ * Get embedding configuration from environment
  */
-function isEmbeddingModelAvailable(): boolean {
-  // In production, this would check for ONNX Runtime or similar
-  // For now, we support Ollama embeddings if available
-  return true; // Always true, will fallback gracefully
+export function getEmbeddingConfig() {
+  // Note: These environment variables should be added to .env.local
+  // For now, we use defaults that work with local Ollama
+  return {
+    provider: 'local',
+    model: 'nomic-embed-text',
+    dimensions: 768,
+    endpoint: 'http://localhost:11434/api/embeddings',
+  };
 }
 
 // ============================================================================
@@ -85,152 +89,48 @@ function isEmbeddingModelAvailable(): boolean {
 // ============================================================================
 
 /**
- * Generates embedding for a query using available ML model
- * Supports Ollama, local transformers, or API-based generation
+ * Generate embedding for a query using local Ollama
+ * (In production, this would call a local embedding model)
  */
 export async function generateQueryEmbedding(
   query: string
 ): Promise<EmbeddingResult> {
-  if (!query?.trim()) {
-    return {
-      embedding: [],
-      model: 'none',
-      dimensions: 0,
-      error: new Error('Query cannot be empty'),
-    };
-  }
+  const config = getEmbeddingConfig();
 
+  // Check for local Ollama availability
   try {
-    // Strategy 1: Use Ollama if available (recommended for local dev)
-    if (env.OLLAMA_BASE_URL) {
-      const embedding = await generateWithOllama(query);
-      if (embedding) {
-        return {
-          embedding,
-          model: 'ollama',
-          dimensions: embedding.length,
-        };
-      }
-    }
-
-    // Strategy 2: Use simple hash-based fallback for testing
-    // In production, this would use a proper embedding model
-    const fallbackEmbedding = generateFallbackEmbedding(query);
-    return {
-      embedding: fallbackEmbedding,
-      model: 'fallback-hash',
-      dimensions: EMBEDDING_DIMENSIONS,
-    };
-  } catch (error) {
-    console.error('[UserPrefs] Embedding generation error:', error);
-    return {
-      embedding: [],
-      model: 'none',
-      dimensions: 0,
-      error: error instanceof Error ? error : new Error('Unknown embedding error'),
-    };
-  }
-}
-
-/**
- * Generate embedding using Ollama API
- */
-async function generateWithOllama(query: string): Promise<number[] | null> {
-  try {
-    const baseUrl = env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    const model = env.OLLAMA_MODEL || 'nomic-embed-text';
-
-    const response = await fetch(`${baseUrl}/api/embed`, {
+    const response = await fetch(config.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model,
+        model: config.model,
         prompt: query,
-        options: {
-          num_predict: 1,
-        },
+        options: { num_predict: config.dimensions },
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status}`);
+      throw new Error(`Embedding API error: ${response.status}`);
     }
 
     const data = await response.json();
 
-    // Normalize to 384 dimensions if needed
-    let embedding: number[] = data.embedding || data.embeddings?.[0];
-    if (!embedding) {
-      return null;
-    }
-
-    // Truncate or pad to 384 dimensions
-    if (embedding.length > EMBEDDING_DIMENSIONS) {
-      embedding = embedding.slice(0, EMBEDDING_DIMENSIONS);
-    } else if (embedding.length < EMBEDDING_DIMENSIONS) {
-      // Pad with zeros
-      const paddingLength = EMBEDDING_DIMENSIONS - embedding.length;
-      embedding = [
-        ...embedding,
-        ...Array<number>(paddingLength).fill(0),
-      ];
-    }
-
-    // Normalize to unit length (for cosine similarity via inner product)
-    const norm = Math.sqrt(
-      embedding.reduce((sum, val) => sum + val * val, 0)
-    );
-    if (norm > 0) {
-      embedding = embedding.map((val) => val / norm);
-    }
-
-    return embedding;
+    return {
+      embedding: data.embedding || data.embeddings?.[0] || [],
+      model: config.model,
+      dimensions: config.dimensions,
+    };
   } catch (error) {
-    console.warn('[UserPrefs] Ollama embedding failed:', error);
-    return null;
+    console.error('[USER_PREFS] Embedding generation error:', error);
+
+    // Return fallback embedding (all zeros)
+    return {
+      embedding: new Array(config.dimensions).fill(0),
+      model: config.model,
+      dimensions: config.dimensions,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
-}
-
-/**
- * Generate deterministic embedding from query text
- * Used as fallback when no ML model is available
- * Note: This is NOT semantic similarity - just a hash-like representation
- */
-function generateFallbackEmbedding(query: string): number[] {
-  // Simple word-based feature extraction
-  const words = query.toLowerCase().split(/\s+/);
-  const embedding: number[] = Array<number>(EMBEDDING_DIMENSIONS).fill(0);
-
-  // Create a simple hash for each word
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    let hash = 0;
-    for (let j = 0; j < word.length; j++) {
-      hash = ((hash << 5) - hash + word.charCodeAt(j)) | 0;
-    }
-
-    // Distribute hash across embedding dimensions
-    const idx1 = Math.abs(hash) % EMBEDDING_DIMENSIONS;
-    const idx2 = Math.abs((hash >> 8)) % EMBEDDING_DIMENSIONS;
-
-    // Set values with some spread
-    embedding[idx1] += 1 / (i + 1);  // Earlier words more important
-    if (idx2 !== idx1) {
-      embedding[idx2] += 0.5 / (i + 1);
-    }
-  }
-
-  // Normalize to unit length
-  const norm = Math.sqrt(
-    embedding.reduce((sum, val) => sum + val * val, 0)
-  );
-  if (norm > 0) {
-    for (let i = 0; i < EMBEDDING_DIMENSIONS; i++) {
-      embedding[i] /= norm;
-    }
-  }
-
-  return embedding;
 }
 
 // ============================================================================
@@ -238,416 +138,303 @@ function generateFallbackEmbedding(query: string): number[] {
 // ============================================================================
 
 /**
- * Store a user query embedding for preference tracking
+ * Store a user preference embedding
  */
 export async function storePreference(params: {
   userId: string;
-  query: string;
+  queryText: string;
+  embedding: number[];
   contextType: PreferenceContextType;
   contextId?: string;
-  metadata?: Record<string, unknown>;
-}): Promise<PreferenceResult> {
-  // Generate embedding for the query
-  const embeddingResult = await generateQueryEmbedding(params.query);
+}): Promise<PreferenceQueryResult> {
+  const { userId, queryText, embedding, contextType, contextId } = params;
 
-  if (embeddingResult.error || embeddingResult.embedding.length === 0) {
+  try {
+    const result = await queryDatabase(
+      `INSERT INTO "UserEmbedding" (id, user_id, embedding, query_text, context_type, context_id, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+       RETURNING *`,
+      [userId, JSON.stringify(embedding), queryText, contextType, contextId || null]
+    );
+
+    return { data: result as UserEmbeddingRecord[] };
+  } catch (error) {
+    console.error('[USER_PREFS] Store preference error:', error);
     return {
-      success: false,
-      error: embeddingResult.error || new Error('Failed to generate embedding'),
+      data: [],
+      error: error instanceof Error ? error : new Error('Unknown error'),
     };
   }
-
-  const db = getSupabaseDatabase();
-
-  // Store in database
-  const result = await db.storeUserEmbedding({
-    userId: params.userId,
-    embedding: embeddingResult.embedding,
-    queryText: params.query,
-    contextType: params.contextType,
-    contextId: params.contextId,
-  });
-
-  if (result.error) {
-    console.error('[UserPrefs] Store error:', result.error.message);
-    return {
-      success: false,
-      error: result.error,
-    };
-  }
-
-  if (env.NODE_ENV === 'development') {
-    console.log('[UserPrefs] Stored preference:', {
-      userId: params.userId,
-      contextType: params.contextType,
-      model: embeddingResult.model,
-    });
-  }
-
-  return {
-    success: true,
-    embeddingId: result.data?.id,
-  };
 }
 
 /**
- * Store multiple preferences in batch
+ * Store multiple preferences in a batch
  */
 export async function storePreferencesBatch(
   preferences: Array<{
     userId: string;
-    query: string;
+    queryText: string;
+    embedding: number[];
     contextType: PreferenceContextType;
     contextId?: string;
   }>
-): Promise<PreferenceResult[]> {
-  // Process sequentially to avoid overwhelming the embedding service
-  const results: PreferenceResult[] = [];
-
-  for (const pref of preferences) {
-    const result = await storePreference(pref);
-    results.push(result);
-
-    // Small delay between requests
-    await new Promise((resolve) => setTimeout(resolve, 50));
+): Promise<PreferenceQueryResult> {
+  if (preferences.length === 0) {
+    return { data: [] };
   }
 
-  return results;
+  try {
+    const values = preferences
+      .map(
+        (p) =>
+          `(gen_random_uuid(), '${p.userId}', '${JSON.stringify(p.embedding).replace(/'/g, "''")}', '${p.queryText.replace(/'/g, "''")}', '${p.contextType}', ${p.contextId ? `'${p.contextId}'` : 'NULL'}, NOW(), NOW())`
+      )
+      .join(', ');
+
+    const result = await queryDatabase(
+      `INSERT INTO "UserEmbedding" (id, user_id, embedding, query_text, context_type, context_id, created_at, updated_at)
+       VALUES ${values}
+       RETURNING *`
+    );
+
+    return { data: result as UserEmbeddingRecord[] };
+  } catch (error) {
+    console.error('[USER_PREFS] Batch store error:', error);
+    return {
+      data: [],
+      error: error instanceof Error ? error : new Error('Unknown error'),
+    };
+  }
 }
 
-// ============================================================================
-// Preference Retrieval
-// ============================================================================
-
 /**
- * Get similar preferences for a user query
+ * Find similar embeddings for a user
  */
 export async function getSimilarPreferences(params: {
   userId: string;
-  query: string;
+  embedding: number[];
   limit?: number;
   threshold?: number;
-}): Promise<PreferenceQueryResult> {
-  // Generate embedding for the query
-  const embeddingResult = await generateQueryEmbedding(params.query);
+}): Promise<PreferenceResult> {
+  const { userId, embedding, limit = 10, threshold = 0.7 } = params;
 
-  if (embeddingResult.error || embeddingResult.embedding.length === 0) {
+  try {
+    const result = await queryDatabase(
+      `SELECT * FROM "UserEmbedding"
+       WHERE user_id = $1
+       ORDER BY embedding <=> $2::vector
+       LIMIT $3`,
+      [userId, JSON.stringify(embedding), limit]
+    );
+
+    const embeddings = result as (UserEmbeddingRecord & { similarity: number })[];
+    const validEmbeddings = embeddings.filter(
+      (e) => 1 - (e.similarity || 0) >= threshold
+    );
+
+    return {
+      preferences: validEmbeddings,
+      similar_count: validEmbeddings.length,
+    };
+  } catch (error) {
+    console.error('[USER_PREFS] Get similar preferences error:', error);
     return {
       preferences: [],
-      similarCount: 0,
-      error: embeddingResult.error,
+      similar_count: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-
-  const db = getSupabaseDatabase();
-
-  const result = await db.findSimilarEmbeddings({
-    embedding: embeddingResult.embedding,
-    userId: params.userId,
-    limit: params.limit || 10,
-    threshold: params.threshold || 0.5,
-  });
-
-  if (result.error) {
-    console.error('[UserPrefs] Retrieval error:', result.error.message);
-    return {
-      preferences: [],
-      similarCount: 0,
-      error: result.error,
-    };
-  }
-
-  return {
-    preferences: result.data || [],
-    similarCount: result.data?.length || 0,
-  };
 }
 
 /**
- * Get all preferences for a user (for analytics/preference export)
+ * Get all user preferences
  */
 export async function getUserPreferences(
-  userId: string,
-  limit: number = 100
-): Promise<{ preferences: UserEmbeddingRecord[]; error?: Error }> {
-  const db = getSupabaseDatabase();
+  userId: string
+): Promise<PreferenceResult> {
+  try {
+    const result = await queryDatabase(
+      `SELECT * FROM "UserEmbedding"
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
+    );
 
-  // For now, we query using findSimilarEmbeddings with a zero threshold
-  // In a real implementation, you'd add a getUserAllEmbeddings method
-  const result = await db.findSimilarEmbeddings({
-    embedding: Array<number>(EMBEDDING_DIMENSIONS).fill(0),
-    userId,
-    limit,
-    threshold: -1,  // Get all embeddings
-  });
-
-  return {
-    preferences: result.data || [],
-    error: result.error,
-  };
+    return {
+      preferences: result as UserEmbeddingRecord[],
+      similar_count: result.length,
+    };
+  } catch (error) {
+    console.error('[USER_PREFS] Get user preferences error:', error);
+    return {
+      preferences: [],
+      similar_count: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 }
 
-// ============================================================================
-// Preference Updates from Conversation Context
-// ============================================================================
-
 /**
- * Extract preferences from conversation context and store them
+ * Update preferences from conversation context
  */
-export async function updatePreferencesFromContext(
-  context: ConversationContext
-): Promise<{ stored: number; errors: number }> {
-  const { userId, messages, currentIntent, lastQuery } = context;
+export async function updatePreferencesFromContext(params: {
+  userId: string;
+  contextType: PreferenceContextType;
+  contextId?: string;
+  queryText: string;
+  embedding: number[];
+}): Promise<PreferenceQueryResult> {
+  const { userId, contextType, contextId, queryText, embedding } = params;
 
-  let stored = 0;
-  let errors = 0;
-
-  // Determine context type from intent
-  let contextType: PreferenceContextType = 'general_support';
-  if (currentIntent) {
-    switch (currentIntent.toLowerCase()) {
-      case 'product_search':
-      case 'recommendation':
-        contextType = 'product_search';
-        break;
-      case 'order_inquiry':
-        contextType = 'order_inquiry';
-        break;
-      case 'ticket_create':
-        contextType = 'ticket_create';
-        break;
-    }
-  }
-
-  // Process user messages for preference extraction
-  for (const message of messages) {
-    if (message.role === 'user' && message.content.trim()) {
-      // Skip very short messages (greetings, thanks, etc.)
-      if (message.content.split(/\s+/).length < 3) {
-        continue;
-      }
-
-      const result = await storePreference({
-        userId,
-        query: message.content,
-        contextType,
-        metadata: {
-          extractedFrom: 'conversation',
-          messageCount: messages.length,
-          intent: currentIntent,
-        },
-      });
-
-      if (result.success) {
-        stored++;
-      } else {
-        errors++;
-      }
-    }
-  }
-
-  // Store the last query specifically if provided
-  if (lastQuery && lastQuery !== messages[messages.length - 1]?.content) {
-    const result = await storePreference({
-      userId,
-      query: lastQuery,
-      contextType,
-      metadata: {
-        extractedFrom: 'current_query',
-        intent: currentIntent,
-      },
-    });
-
-    if (result.success) {
-      stored++;
-    } else {
-      errors++;
-    }
-  }
-
-  return { stored, errors };
+  return storePreference({
+    userId,
+    queryText,
+    embedding,
+    contextType,
+    contextId,
+  });
 }
 
 /**
- * Consolidate similar preferences (merge duplicates or near-duplicates)
- * This helps reduce storage and improve search quality
+ * Consolidate user preferences (keep only recent unique ones)
  */
 export async function consolidateUserPreferences(
   userId: string,
-  similarityThreshold: number = 0.95
-): Promise<{ consolidated: number; deleted: number; error?: Error }> {
-  // Get all user preferences
-  const { preferences } = await getUserPreferences(userId, 1000);
+  keepCount: number = 50
+): Promise<{ deleted: number; error?: string }> {
+  try {
+    const result = await queryDatabase(
+      `WITH ranked AS (
+         SELECT id, ROW_NUMBER() OVER (PARTITION BY query_text ORDER BY created_at DESC) as rn
+         FROM "UserEmbedding"
+         WHERE user_id = $1
+       )
+       DELETE FROM "UserEmbedding"
+       WHERE id IN (
+         SELECT id FROM ranked WHERE rn > $2
+       )`,
+      [userId, keepCount]
+    );
 
-  if (preferences.length === 0) {
-    return { consolidated: 0, deleted: 0 };
+    return { deleted: result.length };
+  } catch (error) {
+    console.error('[USER_PREFS] Consolidate preferences error:', error);
+    return {
+      deleted: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
-
-  const toDelete: string[] = [];
-  let consolidated = 0;
-
-  // Compare each pair (O(n^2) but acceptable for small preference sets)
-  for (let i = 0; i < preferences.length; i++) {
-    if (toDelete.indexOf(preferences[i].id) >= 0) continue;
-
-    for (let j = i + 1; j < preferences.length; j++) {
-      if (toDelete.indexOf(preferences[j].id) >= 0) continue;
-
-      // Calculate similarity
-      const similarity = calculateSimilarity(
-        preferences[i].embedding,
-        preferences[j].embedding
-      );
-
-      if (similarity >= similarityThreshold) {
-        // Mark the older one for deletion
-        const older =
-          new Date(preferences[i].created_at) < new Date(preferences[j].created_at)
-            ? preferences[i]
-            : preferences[j];
-        toDelete.push(older.id);
-        consolidated++;
-      }
-    }
-  }
-
-  // In production, you would delete the marked records here
-  // For now, we just return counts
-  if (env.NODE_ENV === 'development') {
-    console.log('[UserPrefs] Consolidation plan:', {
-      userId,
-      toDelete: toDelete.length,
-      consolidated,
-    });
-  }
-
-  return {
-    consolidated,
-    deleted: toDelete.length,
-  };
 }
 
 /**
- * Calculate cosine similarity between two embeddings
- */
-function calculateSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-  if (denominator === 0) return 0;
-
-  return dotProduct / denominator;
-}
-
-// ============================================================================
-// Cleanup and Maintenance
-// ============================================================================
-
-/**
- * Delete old preferences for a user
+ * Cleanup old preferences (older than specified days)
  */
 export async function cleanupOldPreferences(
   userId: string,
   olderThanDays: number = 90
-): Promise<{ deleted: number; error?: Error }> {
-  const db = getSupabaseDatabase();
+): Promise<{ deleted: number; error?: string }> {
+  try {
+    const result = await queryDatabase(
+      `DELETE FROM "UserEmbedding"
+       WHERE user_id = $1
+       AND created_at < NOW() - INTERVAL '${olderThanDays} days'`,
+      [userId]
+    );
 
-  const result = await db.deleteOldEmbeddings({
-    userId,
-    olderThanDays,
-  });
-
-  if (result.error) {
-    return { deleted: 0, error: result.error };
+    return { deleted: result.length };
+  } catch (error) {
+    console.error('[USER_PREFS] Cleanup old preferences error:', error);
+    return {
+      deleted: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
-
-  return {
-    deleted: result.data?.count || 0,
-  };
 }
 
 /**
  * Get preference statistics for a user
  */
 export async function getPreferenceStats(userId: string): Promise<{
-  totalPreferences: number;
-  byContextType: Record<string, number>;
-  oldestPreference?: Date;
-  newestPreference?: Date;
+  total: number;
+  byContext: Record<string, number>;
+  oldest: string | null;
+  newest: string | null;
 }> {
-  const { preferences } = await getUserPreferences(userId, 1000);
+  try {
+    const [totalResult, contextResult, oldestResult, newestResult] = await Promise.all([
+      queryDatabase(`SELECT COUNT(*) as count FROM "UserEmbedding" WHERE user_id = $1`, [userId]),
+      queryDatabase(
+        `SELECT context_type, COUNT(*) as count FROM "UserEmbedding" WHERE user_id = $1 GROUP BY context_type`,
+        [userId]
+      ),
+      queryDatabase(
+        `SELECT MIN(created_at) as oldest FROM "UserEmbedding" WHERE user_id = $1`,
+        [userId]
+      ),
+      queryDatabase(
+        `SELECT MAX(created_at) as newest FROM "UserEmbedding" WHERE user_id = $1`,
+        [userId]
+      ),
+    ]);
 
-  const byContextType: Record<string, number> = {};
-  let oldest: Date | undefined;
-  let newest: Date | undefined;
+    const byContext: Record<string, number> = {};
+    for (const row of contextResult) {
+      byContext[row.context_type] = row.count;
+    }
 
-  for (const pref of preferences) {
-    byContextType[pref.context_type] = (byContextType[pref.context_type] || 0) + 1;
+    return {
+      total: totalResult[0]?.count || 0,
+      byContext,
+      oldest: oldestResult[0]?.oldest || null,
+      newest: newestResult[0]?.newest || null,
+    };
+  } catch (error) {
+    console.error('[USER_PREFS] Get preference stats error:', error);
+    return {
+      total: 0,
+      byContext: {},
+      oldest: null,
+      newest: null,
+    };
+  }
+}
 
-    const created = new Date(pref.created_at);
-    if (!oldest || created < oldest) oldest = created;
-    if (!newest || created > newest) newest = created;
+// ============================================================================
+// Validation
+// ============================================================================
+
+/**
+ * Validate embedding format and dimensions
+ */
+export function validateEmbedding(
+  embedding: unknown,
+  expectedDimensions: number = 768
+): { valid: boolean; dimensions?: number; error?: string } {
+  if (!Array.isArray(embedding)) {
+    return { valid: false, error: 'Embedding must be an array' };
   }
 
-  return {
-    totalPreferences: preferences.length,
-    byContextType,
-    oldestPreference: oldest,
-    newestPreference: newest,
-  };
+  if (embedding.length === 0) {
+    return { valid: false, error: 'Embedding array is empty' };
+  }
+
+  if (embedding.length !== expectedDimensions) {
+    return {
+      valid: false,
+      dimensions: embedding.length,
+      error: `Expected ${expectedDimensions} dimensions, got ${embedding.length}`,
+    };
+  }
+
+  // Check all values are numbers
+  if (!embedding.every((v) => typeof v === 'number' && !isNaN(v))) {
+    return { valid: false, error: 'Embedding contains non-numeric values' };
+  }
+
+  // Check for NaN or Infinity
+  if (embedding.some((v) => !isFinite(v))) {
+    return { valid: false, error: 'Embedding contains non-finite values' };
+  }
+
+  return { valid: true, dimensions: embedding.length };
 }
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Validate embedding dimensions
- */
-export function validateEmbedding(embedding: number[]): boolean {
-  return (
-    Array.isArray(embedding) &&
-    embedding.length === EMBEDDING_DIMENSIONS &&
-    embedding.every((val) => typeof val === 'number' && !isNaN(val))
-  );
-}
-
-/**
- * Get embedding configuration
- */
-export function getEmbeddingConfig(): {
-  dimensions: number;
-  model: string;
-  metric: string;
-} {
-  return {
-    dimensions: EMBEDDING_DIMENSIONS,
-    model: DEFAULT_EMBEDDING_MODEL,
-    metric: 'cosine',  // Using inner product on normalized vectors
-  };
-}
-
-// Default export for convenience
-export default {
-  generateQueryEmbedding,
-  storePreference,
-  getSimilarPreferences,
-  updatePreferencesFromContext,
-  cleanupOldPreferences,
-  getPreferenceStats,
-  storePreferencesBatch,
-  getUserPreferences,
-  consolidateUserPreferences,
-  validateEmbedding,
-  getEmbeddingConfig,
-};

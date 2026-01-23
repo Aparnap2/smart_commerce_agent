@@ -1,12 +1,11 @@
 'use client';
-import { useChat } from '@ai-sdk/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Send, RotateCcw, X, ShoppingCart, Star, Search } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 // Product data
 const products = [
@@ -27,42 +26,153 @@ const categories = [
   { name: 'Accessories', icon: '' }
 ];
 
+// Message type definition
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export default function Home() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
-    api: '/api/chat/route-ollama',
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [chatInput, setChatInput] = useState('');
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Filter messages to display
-  const displayedMessages = useMemo(() => {
-    return messages.filter((m) => m.role !== 'system');
-  }, [messages]);
-
-  // Handle errors from useChat
-  useEffect(() => {
-    if (error) {
-      console.error('[UI] Chat error:', error);
-      toast.error('Failed to process chat response.');
-    }
-  }, [error]);
-
   // Reset chat
-  const resetChat = () => {
+  const resetChat = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setMessages([]);
     toast.success('Chat history reset!');
-  };
+  }, []);
 
-  // Render message content
-  const renderMessageContent = (message) => {
-    if (!message.content) {
+  // Send message with SSE streaming
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: content.trim(),
+    };
+
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Add empty assistant message to show streaming
+      setMessages(prev => [...prev, assistantMessage]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const chunk = JSON.parse(data);
+              if (chunk.error) {
+                throw new Error(chunk.message);
+              }
+
+              const contentDelta = chunk.choices?.[0]?.delta?.content;
+              if (contentDelta) {
+                setMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last?.id === assistantMessageId) {
+                    return [...prev.slice(0, -1), {
+                      ...last,
+                      content: last.content + contentDelta,
+                    }];
+                  }
+                  return prev;
+                });
+              }
+            } catch (parseError) {
+              // Skip invalid JSON
+              console.warn('Failed to parse chunk:', data);
+            }
+          }
+        }
+      }
+
+      toast.success('Response received');
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('[UI] Request aborted');
+        return;
+      }
+
+      console.error('[UI] Chat error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send message');
+
+      // Remove empty assistant message on error
+      setMessages(prev => prev.filter(m => m.id !== assistantMessageId));
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  }, [messages, isLoading]);
+
+  // Render message content with markdown
+  const renderMessageContent = (content: string) => {
+    if (!content) {
       return (
         <div className="text-gray-500 dark:text-gray-400 text-sm">
           No response content available.
@@ -87,7 +197,7 @@ export default function Home() {
             pre: ({ node, ...props }) => <pre className="bg-gray-100 dark:bg-gray-800 rounded p-2 overflow-x-auto" {...props} />,
           }}
         >
-          {message.content}
+          {content}
         </ReactMarkdown>
       </div>
     );
@@ -159,10 +269,9 @@ export default function Home() {
                     src={product.image}
                     alt={product.name}
                     className="object-contain h-full w-full"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.style.display = 'none';
-                      // Optionally, you could set a state to show the icon if image fails
+                    onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.style.display = 'none';
                     }}
                   />
                 ) : (
@@ -224,7 +333,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {displayedMessages.length === 0 && (
+              {messages.length === 0 && (
                 <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
                   <div className="mb-4">
                     <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
@@ -237,47 +346,38 @@ export default function Home() {
                   </p>
                 </div>
               )}
-               {displayedMessages.map((message, i) => {
-                 return message.role === 'user' ? (
-                  <motion.div
-                    key={i}
-                    className="flex justify-end"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="inline-block p-3 rounded-xl text-sm bg-blue-600 text-white max-w-[85%] shadow-sm">
-                      {message.content}
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key={i}
-                    className="flex justify-start"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="inline-block p-3 rounded-xl text-sm bg-gray-100 dark:bg-neutral-700 text-gray-800 dark:text-gray-200 max-w-[85%] shadow-sm">
-                      {renderMessageContent(message)}
-                    </div>
-                  </motion.div>
-                );
-              })}
-              {isLoading && (
+              {messages.map((message) => (
+                <motion.div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className={`inline-block p-3 rounded-xl text-sm max-w-[85%] shadow-sm ${
+                    message.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-neutral-700 text-gray-800 dark:text-gray-200'
+                  }`}>
+                    {message.role === 'user' ? (
+                      message.content
+                    ) : (
+                      renderMessageContent(message.content)
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+              {isLoading && messages[messages.length - 1]?.role === 'user' && (
                 <motion.div
                   className="flex justify-start"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
-                  key="loading-indicator"
                 >
                   <div className="inline-block p-3 rounded-xl text-sm bg-gray-100 dark:bg-neutral-700 text-gray-800 dark:text-gray-200 max-w-[85%] shadow-sm">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-xs">
-                        {messages.length === 0 ? 'Starting conversation...' : 'Thinking...'}
-                      </span>
+                      <span className="text-xs">Thinking...</span>
                     </div>
                   </div>
                 </motion.div>
@@ -285,20 +385,28 @@ export default function Home() {
               <div ref={messagesEndRef} />
             </div>
             <form
-              onSubmit={handleSubmit}
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (chatInput.trim()) {
+                  await sendMessage(chatInput);
+                  setChatInput('');
+                }
+              }}
               className="border-t border-gray-200 dark:border-gray-700 p-4 flex items-center"
             >
               <input
                 type="text"
-                value={input}
-                onChange={handleInputChange}
+                name="chat-input"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Ask about orders, products, or support..."
                 className="flex-1 p-2 rounded-l-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                disabled={isLoading}
               />
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-r-lg transition"
-                disabled={isLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-r-lg transition disabled:opacity-50"
+                disabled={isLoading || !chatInput.trim()}
               >
                 {isLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
