@@ -1,0 +1,34 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:44.412Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Home Page should load home page with product catalog",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:44.413Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Home Page should load home page with product catalog",
+    "message": "Testing home page"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:45.790Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Home Page should load home page with product catalog",
+    "message": "Current URL",
+    "url": "http://localhost:3000/"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:45.821Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Home Page should load home page with product catalog",
+    "message": "Product elements found",
+    "count": 0
+  },
+  {
+    "timestamp": "2026-01-23T12:37:45.822Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Home Page should load home page with product catalog",
+    "message": "Home page loaded"
+  }
+]

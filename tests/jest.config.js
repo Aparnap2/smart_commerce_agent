@@ -19,12 +19,20 @@ export default {
   coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
   testTimeout: 30000,
   verbose: true,
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       tsconfig: {
-        module: 'ESNext',
-        target: 'ES2022'
+        target: 'ES2022',
+        module: 'Node16',
+        esModuleInterop: true,
+        strict: false,
+        skipLibCheck: true,
+        allowJs: true,
+        moduleResolution: 'node16',
       }
-    }
-  }
+    }]
+  },
+  transformIgnorePatterns: [
+    'node_modules/(?!(zod)/)'
+  ]
 };

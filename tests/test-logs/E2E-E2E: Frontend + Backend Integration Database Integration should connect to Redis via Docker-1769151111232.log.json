@@ -1,0 +1,33 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.037Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to Redis via Docker",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.038Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to Redis via Docker",
+    "message": "Testing Redis connection"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.228Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to Redis via Docker",
+    "message": "Redis connection established"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.230Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to Redis via Docker",
+    "message": "Redis test value",
+    "value": "test-value"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.232Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Database Integration should connect to Redis via Docker",
+    "message": "Redis test passed"
+  }
+]

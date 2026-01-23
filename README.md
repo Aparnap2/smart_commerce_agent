@@ -1,243 +1,280 @@
-# Vercel AI SDK E-commerce Chatbot
+# Vercel AI SDK E-commerce Chatbot with MCP
 
-A **production-ready, AI-powered e-commerce support chatbot** built with:
-
-- **Vercel AI SDK** (streaming, tools, edge-ready)
-- **Google Gemini** (LLM)
-- **Prisma** + **Neon DB** (type-safe, serverless Postgres)
-- **Zod** (robust schema validation)
-- **Next.js** (modern frontend, App Router)
-
----
+A **production-ready, AI-powered e-commerce support chatbot** featuring **Model Context Protocol (MCP)** integration with type-safe PostgreSQL access.
 
 ## ✨ Features
 
-- **Conversational AI**: Natural support for orders, products, support tickets, and more.
-- **Database integration**: Type-safe queries and mutations via Prisma and Neon DB.
-- **Streaming LLM responses**: Fast, real-time answers powered by Google Gemini and Vercel AI SDK.
-- **Input validation**: All API and LLM-tool inputs validated with Zod.
-- **Modern UI**: Responsive React/Next.js chat interface with Markdown rendering and animated UX.
-- **Extensible**: Add tools, business logic, validation, or third-party API integrations easily.
+- **Conversational AI**: Natural support for orders, products, support tickets, and refunds
+- **MCP Tool Protocol**: Modular tool execution with db_query, web_search, and semantic_search
+- **Prisma ORM**: Type-safe database access to PostgreSQL
+- **Streaming LLM**: Real-time responses via OpenAI SDK with Ollama (local) or Google Gemini (production)
+- **SSE Streaming**: Server-Sent Events for instant UI updates
+- **Comprehensive Logging**: Debug logs with emoji prefixes for tool execution, Prisma queries, and LLM calls
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: Next.js, React, Tailwind CSS, framer-motion, react-markdown
-- **Backend**: Vercel AI SDK, Google Gemini, Prisma, Neon DB, Zod, nanoid
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Next.js 15, React 19, Tailwind CSS, framer-motion |
+| **Backend** | OpenAI SDK + Ollama (local) or Google Gemini (production) |
+| **Database** | PostgreSQL with Prisma ORM |
+| **Protocol** | MCP (Model Context Protocol) for tool execution |
+| **Validation** | Zod schemas |
+| **AI Tools** | db_query, web_search, semantic_search |
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. **Clone the repo**
+### 1. **Clone and install**
 
 ```bash
 git clone https://github.com/Aparnap2/vercel-ai-sdk.git
 cd vercel-ai-sdk
+pnpm install
 ```
 
-### 2. **Install dependencies**
+### 2. **Set up PostgreSQL**
 
 ```bash
-npm install
-```
+# Start PostgreSQL container
+docker run -d --name postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=vercel_ai \
+  -p 5432:5432 postgres:latest
 
-### 3. **Set up environment variables**
-
-The system automatically switches between **Ollama (development)** and **Google GenAI (production)** based on your environment.
-
-#### Development Mode (Ollama - Local LLM)
-
-For local development, the system uses Ollama by default:
-
-```
-# .env.local for development
-NODE_ENV=development
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=ministral-3:3b
-```
-
-**Requirements:**
-- Docker with Ollama container running
-- Model `ministral-3:3b` pulled (or your preferred model)
-
-#### Production Mode (Google GenAI)
-
-For production deployment, switch to Google GenAI:
-
-```
-# .env.local for production
-NODE_ENV=production
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here
-```
-
-**Requirements:**
-- Google Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
-- Production database connection
-
-#### Hybrid Mode (Fallback)
-
-You can configure both providers for fallback:
-
-```
-# .env.local for hybrid setup
-NODE_ENV=production
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=ministral-3:3b
-```
-
-In this case, production will use Google GenAI, but can fall back to Ollama if needed.
-
-### 4. **Set up the database**
-
-```bash
+# Initialize Prisma
 npx prisma db push
 npx prisma generate
-# (Optional) seed your DB if you have a script
 ```
 
-### 5. **Run the dev server**
+### 3. **Configure environment**
 
 ```bash
-npm run dev
+# .env.local
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/vercel_ai"
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="qwen2.5-coder:3b"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and chat!
+### 4. **Start Ollama (local LLM)**
+
+```bash
+# Pull the model
+ollama pull qwen2.5-coder:3b
+
+# Start Ollama server
+ollama serve
+```
+
+### 5. **Run the app**
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and try queries like:
+
+- "Show me my orders for john@example.com"
+- "What products do you have?"
+- "Show my support tickets"
 
 ---
 
-## 🧩 Project Structure
+## 📁 Project Structure
 
 ```
 ├── app/
 │   ├── api/
 │   │   └── chat/
-│   │       ├── route.js          # API endpoint (Vercel AI SDK + tools)
-│   │       ├── route-ollama.js    # Ollama-specific route (legacy)
-│   │       └── system-prompt.js  # System prompt for LLM
-│   └── page.jsx                  # Main chat UI
+│   │       └── route.ts          # MCP + Prisma chat API (main)
+│   │       ├── route-ollama/     # Legacy Ollama routes
+│   │       └── system-prompt.js  # LLM system prompt
+│   └── page.tsx                  # Chat UI
 ├── lib/
-│   ├── ai/
-│   │   ├── config.js             # LLM provider configuration (NEW)
-│   │   └── google.js             # Google Gemini config (legacy)
-│   └── tools/
-│       └── database.js           # DB query tool with Zod validation
+│   ├── env.js                    # Environment validation
+│   └── mcp/                      # MCP Infrastructure
+│       ├── adapter.ts            # Tool adapters (Prisma integration)
+│       ├── server.ts             # ECatalogMCPServer class
+│       ├── tools.ts              # Secure tool factory
+│       └── types.ts              # Type definitions
 ├── prisma/
-│   └── schema.prisma             # Prisma models
-├── public/
-│   └── images/                   # Project images
-├── .env.local                    # API keys and DB URL
-├── package.json
-└── README.md
+│   └── schema.prisma             # Database schema
+└── tests/
+    └── e2e/                      # E2E tests with Chrome MCP
 ```
 
 ---
 
-## 🧑‍💻 How It Works
+## 🧠 MCP Tool Architecture
 
-- **Frontend**: Users chat with the bot via a Next.js interface. Messages are sent to `/api/chat`.
-- **API Route**:  
-  - **Automatic LLM Switching**: Uses Ollama in development (`NODE_ENV=development`) and Google GenAI in production (`NODE_ENV=production`).
-  - Handles simple greetings directly.
-  - For all other queries, uses `generateText` from Vercel AI SDK with the configured LLM provider.
-  - Exposes a custom `db_query` tool (validated by Zod and powered by Prisma).
-  - Returns Markdown-formatted, streaming responses.
-- **Database**: All queries are validated (Zod) and run with Prisma on PostgreSQL, returning only safe, allowed data.
-- **LLM Configuration**: The system automatically detects the environment and uses the appropriate LLM provider.
+### Tool Categories
 
----
+| Tool | Purpose | User ID Required |
+|------|---------|------------------|
+| `db_query` | Query orders, products, customers, tickets | Yes |
+| `web_search` | Search policies, FAQs, general info | No |
+| `semantic_search` | Personalized recommendations | Yes |
 
-## 🤖 LLM Provider Configuration
+### Tool Execution Flow
 
-The system features **automatic LLM provider switching** based on the environment:
+```
+User Message
+    ↓
+Tool Detection (regex-based)
+    ↓
+Execute MCP Tools (Prisma queries)
+    ↓
+Build System Prompt + Tool Context
+    ↓
+Send to LLM (Ollama/Gemini)
+    ↓
+Stream SSE Response
+```
 
-### 🔧 Configuration Logic
+### Example: Order Query
 
-```javascript
-// lib/ai/config.js
-function getLLMConfig() {
-  const isDev = env.NODE_ENV === 'development';
-  
-  if (isDev && env.OLLAMA_BASE_URL) {
-    // Development: Use Ollama (local LLM)
-    return {
-      provider: 'ollama',
-      model: createOllama(env.OLLAMA_MODEL),
-      isDev: true
-    };
-  } else if (env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    // Production: Use Google GenAI
-    return {
-      provider: 'google',
-      model: google('models/gemini-2.0-flash-exp'),
-      isDev: false
-    };
-  }
+```typescript
+// app/api/chat/route.ts
+async function executeDbQueryTool(queryType, userEmail) {
+  const orders = await prisma.order.findMany({
+    where: { customer: { email: userEmail } },
+    include: { customer: true, product: true },
+    orderBy: { orderDate: 'desc' },
+    take: 10,
+  });
+  return { success: true, data: orders };
 }
 ```
 
-### 🎛️ Usage in API Routes
+---
 
-Both API routes now use the unified configuration:
+## 📊 Database Schema
 
-```javascript
-// app/api/chat/route.js
-import { getLLMModel, isDevelopment } from '../../../lib/ai/config';
+```prisma
+model Customer {
+  id            Int    @id @default(autoincrement())
+  name          String?
+  email         String @unique
+  phone         String?
+  orders        Order[]
+  supportTickets SupportTicket[]
+}
 
-const result = await generateText({
-  model: getLLMModel(),  // Automatically selects provider
-  temperature: isDevelopment() ? 0.7 : 0.5,  // Higher creativity in dev
-  // ... other parameters
-});
+model Order {
+  id              Int      @id @default(autoincrement())
+  customerId      Int
+  customer        Customer @relation(fields: [customerId], references: [id])
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
+  total           Float
+  status          String
+  paymentStatus   String?
+  trackingNumber  String?
+}
+
+model Product {
+  id          Int     @id @default(autoincrement())
+  name        String
+  price       Float
+  stock       Int
+  category    String?
+}
+
+model SupportTicket {
+  id          Int      @id @default(autoincrement())
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id])
+  issue       String
+  status      String
+  priority    String?
+}
 ```
 
-### 🔄 Switching Behavior
+---
 
-| Environment | Provider | Model | Use Case |
-|------------|----------|-------|----------|
-| `development` | Ollama | `ministral-3:3b` | Local development, no API costs |
-| `production` | Google GenAI | `gemini-2.0-flash-exp` | Production deployment, best performance |
-| `production` (fallback) | Ollama | Configured model | Backup if Google API fails |
+## 🔧 Environment Variables
 
-### 🎯 Benefits
-
-- **Cost Savings**: Use free local Ollama for development
-- **Performance**: Use optimized Google models in production
-- **Flexibility**: Easy to switch between providers
-- **Fallback**: Automatic fallback if primary provider fails
-- **Consistency**: Same API interface for both providers
-
-## 🛡️ Security & Best Practices
-
-- **All tool inputs are validated** with Zod before touching the DB.
-- **Edge runtime ready**: Fast, scalable, serverless deployment.
-- **No sensitive data returned** by default (customize tool output as needed).
-- **Easy to extend**:  
-  - Add new tools (APIs, actions, etc.)
-  - Expand the Prisma schema
-  - Customize system prompt/business logic
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `OLLAMA_BASE_URL` | Dev | Ollama server URL (default: http://localhost:11434) |
+| `OLLAMA_MODEL` | Dev | Model name (default: qwen2.5-coder:3b) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Prod | Google Gemini API key |
 
 ---
 
-## 📦 Customization
+## 🧪 Testing
 
-- **Change the System Prompt**:  
-  Edit `app/api/chat/system-prompt.js`
-- **Modify data models**:  
-  Edit `prisma/schema.prisma` and run `npx prisma db push`
-- **Add/modify tools**:  
-  See `lib/tools/database.js`
-- **UI tweaks**:  
-  Edit `app/page.jsx` and Tailwind classes
+### E2E Tests with Chrome MCP
+
+```bash
+# Run E2E tests
+pnpm test:e2e
+```
+
+Tests include:
+- Database integration (PostgreSQL via Prisma)
+- Chat interactions
+- Error handling
+- Performance benchmarks
+
+### Manual Testing with curl
+
+```bash
+# Test order query
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"content": "Show me my orders for john@example.com"}]}'
+```
 
 ---
 
-## 📝 License
+## 📝 API Reference
+
+### POST /api/chat
+
+**Request:**
+```json
+{
+  "messages": [
+    { "role": "user", "content": "Show me my orders for john@example.com" }
+  ]
+}
+```
+
+**Response:** Server-Sent Events (SSE)
+
+```
+data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{"content":"Here"}}]}
+data: {"id":"...","object":"chat.completion.chunk","choices":[{"delta":{"content":" are"}}]}
+...
+data: [DONE]
+```
+
+**Debug Logs:**
+```
+[MCP_TOOL] 🔧 Executing db_query: orders for john@example.com
+prisma:query SELECT "public"."Order"."id"... FROM "public"."Order"...
+[MCP_TOOL] ✅ Success: 📦 Found 1 order(s) (76ms)
+[CHAT_API] 📤 Sending to Ollama: qwen2.5-coder:3b
+[CHAT_API] 📡 Streaming response...
+```
+
+---
+
+## 🔒 Security
+
+- All tool inputs validated with Zod
+- User context enforced on all queries
+- Environment variables validated at startup
+- Prepared statements via Prisma (no SQL injection)
+
+---
+
+## 📄 License
 
 MIT
 
@@ -245,9 +282,5 @@ MIT
 
 ## 👤 Author
 
-**Aparnap2**  
-[GitHub](https://github.com/Aparnap2) | [LinkedIn](https://linkedin.com/in/aparnap2)
-
----
-
-## ⭐️ If this helped you, star the repo!
+**Aparnap2**
+[GitHub](https://github.com/Aparnap2)

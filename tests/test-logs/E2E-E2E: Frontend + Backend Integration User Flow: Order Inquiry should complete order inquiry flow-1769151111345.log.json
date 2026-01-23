@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.340Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Order Inquiry should complete order inquiry flow",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.340Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Order Inquiry should complete order inquiry flow",
+    "message": "Testing order inquiry user flow"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.344Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Order Inquiry should complete order inquiry flow",
+    "message": "Order inquiry flow failed",
+    "error": "page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dashboard\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/dashboard\", waiting until \"networkidle\"\u001b[22m\n"
+  }
+]

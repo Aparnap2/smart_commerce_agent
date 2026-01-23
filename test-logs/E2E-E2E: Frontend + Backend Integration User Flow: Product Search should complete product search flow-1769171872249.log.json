@@ -1,0 +1,32 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:49.034Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:49.035Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Testing product search user flow"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:50.223Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Step 1: Navigated to home page"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:52.247Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Step 3: Waited for results"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:52.248Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Product Search should complete product search flow",
+    "message": "Product search flow completed"
+  }
+]

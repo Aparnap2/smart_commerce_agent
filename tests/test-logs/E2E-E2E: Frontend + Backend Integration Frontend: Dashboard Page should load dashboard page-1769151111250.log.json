@@ -1,0 +1,30 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.233Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.234Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Loading dashboard page"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.240Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Network request",
+    "method": "GET",
+    "url": "http://localhost:3000/dashboard",
+    "resourceType": "document"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.249Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should load dashboard page",
+    "message": "Failed to load dashboard",
+    "error": "page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dashboard\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/dashboard\", waiting until \"networkidle\"\u001b[22m\n"
+  }
+]

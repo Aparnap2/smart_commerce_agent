@@ -2,6 +2,7 @@ import { streamText } from 'ai';
 import { databaseQueryTool } from '../../../../lib/tools/database';
 import { SYSTEM_PROMPT } from '../system-prompt';
 import { getLLMModel, isDevelopment, getLLMInfo } from '../../../../lib/ai/config';
+import { env } from '../../../../lib/env.js';
 
 export const maxDuration = 30;
 
@@ -66,7 +67,7 @@ export async function POST(req) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'mistral:latest',
+          model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
           messages: [
             { role: 'system', content: 'You are TechTrend Support, an AI assistant for an e-commerce platform. Help users with orders, products, and support tickets.' },
             ...messages
@@ -82,7 +83,7 @@ export async function POST(req) {
 
       console.log('[OLLAMA_ROUTE] ✅ Direct Ollama call successful');
 
-      // Convert Ollama stream to AI SDK format
+      // Convert Ollama stream to AI SDK 5.0+ Data Stream Protocol
       const stream = new ReadableStream({
         async start(controller) {
           const reader = ollamaResponse.body.getReader();
@@ -100,11 +101,18 @@ export async function POST(req) {
                 try {
                   const data = JSON.parse(line);
                   if (data.message && data.message.content) {
-                    // Convert to AI SDK format: 0:"content"
-                    const aiSdkChunk = `0:"${JSON.stringify(data.message.content)}"\n`;
+                    const content = data.message.content;
+                    // AI SDK 5.0+ Data Stream Protocol format:
+                    // 0:{"type":"text-delta","textDelta":"content"}
+                    const aiSdkChunk = `0:{"type":"text-delta","textDelta":${JSON.stringify(content)}}\n`;
                     controller.enqueue(new TextEncoder().encode(aiSdkChunk));
                   }
                   if (data.done) {
+                    // Send completion message with usage
+                    const usage = data.eval_count ? `\n${JSON.stringify({ usage: { completion_tokens: data.eval_count, prompt_tokens: data.prompt_eval_count } })}` : '';
+                    // Final message
+                    const finalChunk = `0:{"type":"text-delta","textDelta":""}\n`;
+                    controller.enqueue(new TextEncoder().encode(finalChunk));
                     controller.close();
                     return;
                   }
@@ -137,7 +145,7 @@ export async function POST(req) {
       
       const stream = new ReadableStream({
         async start(controller) {
-          const textData = `0:"${JSON.stringify(errorResponse)}"\n`;
+          const textData = `0:{"type":"text-delta","textDelta":${JSON.stringify(errorResponse)}}\n`;
           controller.enqueue(new TextEncoder().encode(textData));
           controller.close();
         }

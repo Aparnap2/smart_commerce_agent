@@ -12,7 +12,7 @@ import {
   logger,
 } from '../index';
 import { getRedisClient } from '../client';
-import type { Checkpoint, CheckpointSaver } from '@langchain/langgraph';
+// import type { Checkpoint, CheckpointSaver } from '@langchain/langgraph';
 
 /**
  * Example 1: Basic Checkpoint Operations
@@ -64,7 +64,7 @@ export async function exampleLangGraphIntegration(): Promise<void> {
   console.log('\n=== Example 2: LangGraph Integration ===\n');
 
   // Create the appropriate checkpoint saver based on environment
-  const checkpointSaver: CheckpointSaver = createCheckpointSaver(
+  const checkpointSaver: any = createCheckpointSaver(
     process.env.USE_REDIS === 'true',
     ['myapp', 'workflows']
   );

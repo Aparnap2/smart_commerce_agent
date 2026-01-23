@@ -1,0 +1,21 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.345Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.346Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Testing refund request user flow"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.351Z",
+    "level": "ERROR",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Refund request flow failed",
+    "error": "page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/dashboard\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/dashboard\", waiting until \"networkidle\"\u001b[22m\n"
+  }
+]

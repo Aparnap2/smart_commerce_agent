@@ -49,11 +49,11 @@ export function createRedisClient(config?: Partial<RedisConfig>): Redis {
   // Exponential backoff retry strategy
   finalConfig.retryStrategy = (times: number): number | null => {
     if (times > 10) {
-      logger.error('Redis: Max retry attempts exceeded');
+      logger.error('Redis', 'Max retry attempts exceeded');
       return null;
     }
     const delay = Math.min(times * 200, 5000);
-    logger.warn(`Redis: Retry attempt ${times}, waiting ${delay}ms`);
+    logger.warn('Redis', `Retry attempt ${times}, waiting ${delay}ms`);
     return delay;
   };
 
@@ -68,38 +68,30 @@ export function createRedisClient(config?: Partial<RedisConfig>): Redis {
     commandTimeout: finalConfig.commandTimeout,
     enableReadyCheck: finalConfig.enableReadyCheck,
     lazyConnect: finalConfig.lazyConnect,
-    poolSize: finalConfig.poolSize,
 
     // TLS configuration for production
     tls: process.env.REDIS_USE_TLS === 'true' ? {} : undefined,
-
-    // Key prefix for isolation
-    keyPrefix: process.env.REDIS_KEY_PREFIX || 'langgraph:',
-
-    // Performance optimizations
-    enableOfflineQueue: true,
-    offlineQueueTimeout: 5000,
   });
 
   // Event handlers
   client.on('connect', () => {
-    logger.info('Redis: Connected successfully');
+    logger.info('Redis', 'Connected successfully');
   });
 
   client.on('ready', () => {
-    logger.info('Redis: Ready to accept commands');
+    logger.info('Redis', 'Ready to accept commands');
   });
 
   client.on('error', (error: Error) => {
-    logger.error(`Redis: Connection error - ${error.message}`);
+    logger.error('Redis', `Connection error - ${error.message}`, error);
   });
 
   client.on('close', () => {
-    logger.warn('Redis: Connection closed');
+    logger.warn('Redis', 'Connection closed');
   });
 
   client.on('reconnecting', () => {
-    logger.info('Redis: Reconnecting...');
+    logger.info('Redis', 'Reconnecting...');
   });
 
   return client;
@@ -152,7 +144,7 @@ export async function closeRedisConnection(): Promise<void> {
   if (redisClient) {
     await redisClient.quit();
     redisClient = null;
-    logger.info('Redis: Connection closed gracefully');
+    logger.info('Redis', 'Connection closed gracefully');
   }
 }
 

@@ -2,13 +2,12 @@
  * E-Commerce Agent SSE API Route
  *
  * Handles POST requests for the LangGraph e-commerce agent with SSE streaming.
- * Provides authentication, thread management, and graceful error handling.
+ * Provides thread management and graceful error handling.
  *
  * @packageDocumentation
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '../../../lib/supabase/client';
 import {
   getCheckpointSaver,
   generateThreadId,
@@ -106,7 +105,7 @@ async function parseRequest(request: NextRequest): Promise<AgentRequest> {
 }
 
 /**
- * Authenticate request using Supabase session
+ * Authenticate request (Supabase removed - using simple token auth)
  * @param request - Next.js request object
  * @returns User ID
  */
@@ -119,29 +118,16 @@ async function authenticateRequest(request: NextRequest): Promise<string> {
     return 'test-user-id';
   }
 
-  // Try to get user from Supabase client
-  const supabase = getSupabaseClient();
-
-  // Check for Bearer token
+  // Simple token-based auth
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    const { data, error } = await supabase.auth.getUser(token);
-
-    if (error || !data.user) {
-      throw new Error('Invalid or expired token');
+    if (token.length > 0) {
+      return token;
     }
-
-    return data.user.id;
   }
 
-  // Try to get user from session (cookies)
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error('Authentication required');
-  }
-
-  return user.id;
+  // Default to anonymous user
+  return 'anonymous-user';
 }
 
 /**
@@ -297,7 +283,7 @@ async function processAgentRequest(
     state,
     timestamp: Date.now(),
     version: existingCheckpoints.length + 1,
-    nodeVisits: state.metadata.node_visits,
+    nodeVisits: state.metadata.node_visits as Record<string, number>,
   });
 
   // Send completion event
@@ -458,7 +444,7 @@ async function handleJSONResponse(
       state,
       timestamp: Date.now(),
       version: existingCheckpoints.length + 1,
-      nodeVisits: state.metadata.node_visits,
+      nodeVisits: state.metadata.node_visits as Record<string, number>,
     });
 
     return NextResponse.json({

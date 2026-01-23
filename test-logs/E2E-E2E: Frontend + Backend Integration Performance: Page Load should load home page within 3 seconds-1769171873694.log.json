@@ -1,0 +1,27 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:52.975Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load home page within 3 seconds",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:52.977Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load home page within 3 seconds",
+    "message": "Testing home page load performance"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:53.691Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load home page within 3 seconds",
+    "message": "Home page load time",
+    "milliseconds": 712
+  },
+  {
+    "timestamp": "2026-01-23T12:37:53.693Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Performance: Page Load should load home page within 3 seconds",
+    "message": "Home page load performance test passed"
+  }
+]

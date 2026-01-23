@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": "2026-01-23T12:37:47.793Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:47.794Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Testing refund request user flow"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:49.013Z",
+    "level": "DEBUG",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Step 1: Navigated to dashboard"
+  },
+  {
+    "timestamp": "2026-01-23T12:37:49.033Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration User Flow: Refund Request should complete refund request flow",
+    "message": "Refund request flow completed"
+  }
+]

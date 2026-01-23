@@ -42,7 +42,7 @@ export const MessageSchema = z.object({
   role: MessageRoleSchema,
   content: z.string(),
   timestamp: z.number().int(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type Message = z.infer<typeof MessageSchema>;
@@ -51,7 +51,7 @@ export const ToolResultSchema = z.object({
   id: z.string(),
   tool_name: z.string(),
   status: ToolCallStatusSchema,
-  input: z.record(z.unknown()),
+  input: z.record(z.string(), z.unknown()),
   output: z.unknown(),
   error: z.string().optional(),
   timestamp: z.number().int(),
@@ -170,7 +170,7 @@ export const AgentMetadataSchema = z.object({
   user_id: z.string().uuid(),
   session_start: z.number().int(),
   last_updated: z.number().int(),
-  node_visits: z.record(z.number().int()).default({}),
+  node_visits: z.record(z.string(), z.number().int()).default({}),
   total_tokens: z.number().int().nonnegative().default(0),
 });
 
@@ -191,7 +191,11 @@ export const AgentStateSchema = z.object({
   context: QueryContextSchema.default({}),
 
   // User preferences and history
-  user_preferences: UserPreferencesSchema.default({}),
+  user_preferences: UserPreferencesSchema.default(() => ({
+    preferred_language: 'en' as const,
+    communication_style: 'casual' as const,
+    frequently_ordered_categories: [] as string[],
+  })),
 
   // Tool execution results
   tool_results: z.array(ToolResultSchema).default([]),
@@ -240,7 +244,11 @@ export function createInitialState(
   return {
     messages,
     context: {},
-    user_preferences: {},
+    user_preferences: {
+      preferred_language: 'en',
+      communication_style: 'casual',
+      frequently_ordered_categories: [],
+    },
     tool_results: [],
     metadata: {
       thread_id: threadId,
