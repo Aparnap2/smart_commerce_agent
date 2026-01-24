@@ -1,98 +1,85 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters", "postgresqlExtensions"]
 }
 
-// ============================================================================
-// User Preference Models
-// ============================================================================
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 /// User embedding for preference history and semantic search
 /// Stores 384-dimensional vectors generated from user queries
 model UserEmbedding {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  embedding    Unsupported("vector(384)") @map("embedding")
-  queryText    String   @map("query_text")
-  contextType  String   @map("context_type")
-  contextId    String?  @map("context_id")
-  metadata     Json?    @default("{}")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          String                @id @default(uuid())
+  userId      String                @map("user_id")
+  embedding   Unsupported("vector") @map("embedding")
+  queryText   String                @map("query_text")
+  contextType String                @map("context_type")
+  contextId   String?               @map("context_id")
+  metadata    Json?                 @default("{}")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
 
   @@unique([userId, queryText, contextType, contextId])
   @@map("user_embeddings")
 }
 
-// ============================================================================
-// E-Commerce Models
-// ============================================================================
-
 model Customer {
-  id            Int            @id @default(autoincrement())
-  name          String?
-  email         String         @unique
-  phone         String?
-  address       String?
-  paymentMethod String?        // Added for e-commerce
-  billingAddress String?       // Added for e-commerce
-  createdAt     DateTime       @default(now())
-  orders        Order[]
+  id             Int             @id @default(autoincrement())
+  name           String?
+  email          String          @unique
+  phone          String?
+  address        String?
+  paymentMethod  String?
+  billingAddress String?
+  createdAt      DateTime        @default(now())
+  orders         Order[]
   supportTickets SupportTicket[]
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
+  id          Int                @id @default(autoincrement())
   name        String
   description String?
   price       Float
   stock       Int
   image       String?
-  category    String?   // Added for e-commerce
-  sku         String?   // Added for e-commerce
-  rating      Float?   // Added for e-commerce
+  category    String?
+  sku         String?
+  rating      Float?
   orders      Order[]
+  embeddings  ProductEmbedding[]
 }
 
 model Order {
-  id              Int      @id @default(autoincrement())
+  id              Int          @id @default(autoincrement())
   customerId      Int
-  customer        Customer @relation(fields: [customerId], references: [id])
   productId       Int
-  product         Product  @relation(fields: [productId], references: [id])
-  orderDate       DateTime @default(now())
+  orderDate       DateTime     @default(now())
   total           Float
   status          String
-  quantity        Int      @default(1)      // Added for e-commerce
-  paymentStatus   String?   // Added for e-commerce
-  shippingAddress String?   // Added for e-commerce
-  trackingNumber  String?   // Added for e-commerce
-
-  // Refund relations
-  refunds         Refund[]
+  quantity        Int          @default(1)
+  paymentStatus   String?
+  shippingAddress String?
+  trackingNumber  String?
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  product         Product      @relation(fields: [productId], references: [id])
   orderRefund     OrderRefund?
+  refunds         Refund[]
 }
 
 model SupportTicket {
-  id              Int      @id @default(autoincrement())
-  customerId      Int
-  customer        Customer @relation(fields: [customerId], references: [id])
-  issue           String
-  status          String
-  createdAt       DateTime @default(now())
-  priority        String?   // Added for e-commerce
-  relatedOrderId  Int?     // Added for e-commerce
-  resolution      String?   // Added for e-commerce
+  id             Int      @id @default(autoincrement())
+  customerId     Int
+  issue          String
+  status         String
+  createdAt      DateTime @default(now())
+  priority       String?
+  relatedOrderId Int?
+  resolution     String?
+  customer       Customer @relation(fields: [customerId], references: [id])
 }
-
-// ============================================================================
-// Refund Models (Stripe Integration)
-// ============================================================================
 
 /// Refund record for tracking Stripe refunds
 model Refund {
@@ -101,22 +88,20 @@ model Refund {
   paymentIntentId String   @map("payment_intent_id")
   orderId         Int?     @map("order_id")
   customerEmail   String?  @map("customer_email")
-  amount          Int      // Amount in cents
+  amount          Int
   currency        String   @default("usd")
-  status          String   // pending, succeeded, failed, canceled
-  reason          String?  // duplicate, fraudulent, requested_by_customer
+  status          String
+  reason          String?
   idempotencyKey  String?  @map("idempotency_key")
   metadata        Json?    @default("{}")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-
-  // Relations
   order           Order?   @relation(fields: [orderId], references: [id])
 
-  @@map("refunds")
   @@index([paymentIntentId])
   @@index([orderId])
   @@index([status])
+  @@map("refunds")
 }
 
 /// Webhook event tracking for idempotency
@@ -127,23 +112,67 @@ model WebhookEvent {
   processedAt DateTime @default(now()) @map("processed_at")
   data        Json?    @default("{}")
 
-  @@map("webhook_events")
   @@index([eventId])
   @@index([eventType])
+  @@map("webhook_events")
 }
 
 /// Order refund status tracking
 model OrderRefund {
-  id              Int      @id @default(autoincrement())
-  orderId         Int      @unique @map("order_id")
-  refundStatus    String   @default("none") @map("refund_status") // none, pending, partial, full
-  refundedAmount  Int      @default(0) @map("refund_amount") // Amount refunded in cents
-  lastRefundId    String?  @map("last_refund_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  // Relation
-  order           Order    @relation(fields: [orderId], references: [id])
+  id             Int      @id @default(autoincrement())
+  orderId        Int      @unique @map("order_id")
+  refundStatus   String   @default("none") @map("refund_status")
+  refundedAmount Int      @default(0) @map("refund_amount")
+  lastRefundId   String?  @map("last_refund_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  order          Order    @relation(fields: [orderId], references: [id])
 
   @@map("order_refunds")
+}
+
+/// Product knowledge embeddings for semantic search
+/// Uses 768-dimensional vectors from nomic-embed-text
+model ProductEmbedding {
+  id             String                @id @default(uuid())
+  productId      Int                   @map("product_id")
+  embedding      Unsupported("vector") @map("embedding")
+  embeddingModel String                @default("nomic-embed-text") @map("embedding_model")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("product_embeddings")
+}
+
+/// Knowledge base document for RAG
+model Document {
+  id        String          @id @default(uuid())
+  title     String
+  content   String
+  docType   String          @map("doc_type")
+  category  String?
+  metadata  Json?           @default("{}")
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  chunks    DocumentChunk[]
+
+  @@map("documents")
+}
+
+/// Document chunks for granular retrieval
+model DocumentChunk {
+  id         String                @id @default(uuid())
+  documentId String                @map("document_id")
+  content    String
+  chunkIndex Int                   @map("chunk_index")
+  embedding  Unsupported("vector") @map("embedding")
+  tokenCount Int?                  @map("token_count")
+  metadata   Json?                 @default("{}")
+  createdAt  DateTime?             @default(now()) @map("created_at")
+  document   Document              @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+  @@map("document_chunks")
 }

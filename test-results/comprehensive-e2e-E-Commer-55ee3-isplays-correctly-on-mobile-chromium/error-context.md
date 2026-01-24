@@ -1,0 +1,78 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - region "Notifications alt+T"
+    - generic [ref=e4]:
+      - heading "TechTrend" [level=1] [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - textbox "Search products..." [ref=e8]
+          - img [ref=e9]
+        - button "Chat Support" [ref=e12]
+    - generic [ref=e14]:
+      - button "All" [ref=e15]: All
+      - button "Computers" [ref=e16]: Computers
+      - button "Phones" [ref=e17]: Phones
+      - button "Audio" [ref=e18]: Audio
+      - button "Wearables" [ref=e19]: Wearables
+      - button "Gaming" [ref=e20]: Gaming
+      - button "Accessories" [ref=e21]: Accessories
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img "Premium Laptop" [ref=e26]
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - heading "Premium Laptop" [level=3] [ref=e29]
+            - generic [ref=e30]:
+              - img [ref=e31]
+              - generic [ref=e33]: "4.5"
+          - paragraph [ref=e34]: $1299.99
+          - paragraph [ref=e35]: High-performance laptop with 16GB RAM and 512GB SSD
+          - generic [ref=e36]:
+            - generic [ref=e37]: Computers
+            - button "Add to Cart" [ref=e38]
+      - generic [ref=e39]:
+        - img "Wireless Earbuds" [ref=e41]
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - heading "Wireless Earbuds" [level=3] [ref=e44]
+            - generic [ref=e45]:
+              - img [ref=e46]
+              - generic [ref=e48]: "4.5"
+          - paragraph [ref=e49]: $149.99
+          - paragraph [ref=e50]: Noise-cancelling earbuds with 24-hour battery life
+          - generic [ref=e51]:
+            - generic [ref=e52]: Audio
+            - button "Add to Cart" [ref=e53]
+      - generic [ref=e54]:
+        - img "Smartphone Pro" [ref=e56]
+        - generic [ref=e57]:
+          - generic [ref=e58]:
+            - heading "Smartphone Pro" [level=3] [ref=e59]
+            - generic [ref=e60]:
+              - img [ref=e61]
+              - generic [ref=e63]: "4.5"
+          - paragraph [ref=e64]: $999.99
+          - paragraph [ref=e65]: Latest smartphone with advanced camera system and all-day battery
+          - generic [ref=e66]:
+            - generic [ref=e67]: Phones
+            - button "Add to Cart" [ref=e68]
+      - generic [ref=e69]:
+        - img "Smart Watch" [ref=e71]
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - heading "Smart Watch" [level=3] [ref=e74]
+            - generic [ref=e75]:
+              - img [ref=e76]
+              - generic [ref=e78]: "4.5"
+          - paragraph [ref=e79]: $299.99
+          - paragraph [ref=e80]: Fitness tracker with heart rate monitor and GPS
+          - generic [ref=e81]:
+            - generic [ref=e82]: Wearables
+            - button "Add to Cart" [ref=e83]
+    - button [ref=e84]:
+      - img [ref=e85]
+  - alert [ref=e87]
+```

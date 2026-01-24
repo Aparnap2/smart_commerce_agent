@@ -5,9 +5,9 @@
 
 export default {
   testEnvironment: 'node',
-  roots: ['<rootDir>'],
+  roots: ['<rootDir>/..'],
   testMatch: ['**/*.test.{js,ts}'],
-  testPathIgnorePatterns: ['/node_modules/'],
+  testPathIgnorePatterns: ['/node_modules/', '/tests/node_modules/', '/tests/e2e/', '/tests/unit/.*\\.test\\.tsx$'],
   moduleFileExtensions: ['js', 'ts', 'json'],
   collectCoverageFrom: [
     'lib/**/*.ts',
@@ -19,20 +19,25 @@ export default {
   coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
   testTimeout: 30000,
   verbose: true,
+  preset: 'ts-jest/presets/default-esm',
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.tsx?$': ['ts-jest', {
+      useESM: true,
       tsconfig: {
         target: 'ES2022',
-        module: 'Node16',
+        module: 'ESNext',
         esModuleInterop: true,
         strict: false,
         skipLibCheck: true,
         allowJs: true,
-        moduleResolution: 'node16',
+        moduleResolution: 'node',
       }
     }]
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(zod)/)'
-  ]
+    'node_modules/(?!(zustand)/)'
+  ],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1'
+  }
 };

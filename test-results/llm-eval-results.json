@@ -1,0 +1,295 @@
+{
+  "timestamp": "2026-01-24T12:26:23.736590",
+  "total_tests": 6,
+  "successful_tests": 6,
+  "average_scores": {
+    "tool_correctness": 0.35000000000000003,
+    "answer_relevancy": 0.19999999999999998,
+    "faithfulness": 0.3833333333333333,
+    "geval": 0.6
+  },
+  "results": [
+    {
+      "test_case": "Order Lookup",
+      "timestamp": "2026-01-24T12:21:33.514877",
+      "response_length": 53,
+      "detected_tools": [
+        "db_query"
+      ],
+      "expected_tools": [
+        "db_query"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.2,
+          "reason": "The response does not address the query topic and is inaccurate.",
+          "expected_tools": [
+            "db_query"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.0,
+          "reason": "The response does not provide any information about the user's orders for 'user@techtrend.com'. It only states that no matching records were found.",
+          "response_length": 53,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.5,
+          "reason": "The response does not accurately represent the context information provided.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.5,
+          "reason": "The response is somewhat helpful but lacks specific details about the user's query. It should provide more context or clarify that no orders were found.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    },
+    {
+      "test_case": "Product Query",
+      "timestamp": "2026-01-24T12:23:01.382848",
+      "response_length": 938,
+      "detected_tools": [
+        "db_query",
+        "web_search"
+      ],
+      "expected_tools": [
+        "db_query",
+        "semantic_search"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.6,
+          "reason": "The response does not directly address the query topic of available laptops and instead provides a generic list of laptop models with basic specifications. The tools used (db_query, semantic_search) are not consistent with the query type.",
+          "expected_tools": [
+            "db_query",
+            "semantic_search"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.5,
+          "reason": "The response provides a generic list of laptops but does not directly address the query about specific available laptops.",
+          "response_length": 938,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.3,
+          "reason": "The response does not accurately represent the context information provided.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.8,
+          "reason": "The response provides a list of generic laptop models and specifications, which is helpful for users who are looking to see available options. However, it lacks specific details about the availability or pricing of these laptops.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    },
+    {
+      "test_case": "Return Policy",
+      "timestamp": "2026-01-24T12:23:40.227811",
+      "response_length": 268,
+      "detected_tools": [
+        "web_search"
+      ],
+      "expected_tools": [
+        "web_search"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.2,
+          "reason": "The response does not address the query topic of return policy and does not use any tools.",
+          "expected_tools": [
+            "web_search"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.0,
+          "reason": "The response does not provide any specific information about the return policy of an AI assistant.",
+          "response_length": 268,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.0,
+          "reason": "The response does not provide any information about the return policy or the company's website.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.5,
+          "reason": "The response provides general guidance on how to find the return policy of an AI language model without specific information about a company's policies.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    },
+    {
+      "test_case": "Order Status",
+      "timestamp": "2026-01-24T12:24:16.066870",
+      "response_length": 131,
+      "detected_tools": [
+        "db_query"
+      ],
+      "expected_tools": [
+        "db_query"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.2,
+          "reason": "The response does not address the query topic of checking order status.",
+          "expected_tools": [
+            "db_query"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.0,
+          "reason": "The response does not address the query at all. It suggests that the order number was not found in the database and provides a suggestion to check for typos.",
+          "response_length": 131,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.5,
+          "reason": "The response does not accurately represent the context information provided.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.5,
+          "reason": "The response is somewhat relevant but could be more helpful by providing specific instructions on how to check the order status or offering alternative ways to contact customer support if the issue persists.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    },
+    {
+      "test_case": "Product Recommendation",
+      "timestamp": "2026-01-24T12:25:49.155363",
+      "response_length": 1006,
+      "detected_tools": [
+        "semantic_search"
+      ],
+      "expected_tools": [
+        "semantic_search",
+        "db_query"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.7,
+          "reason": "The response does not directly address the query topic of recommending a laptop for programming. It provides general information about laptops but does not specifically recommend any models or tools.",
+          "expected_tools": [
+            "semantic_search",
+            "db_query"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.7,
+          "reason": "The response provides a list of recommended laptops for programming but does not directly answer the specific query about which laptop is best.",
+          "response_length": 1006,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.5,
+          "reason": "The response provides some general information about laptops for programming but does not accurately represent the specific context of comparing MacBook Pro, Dell XPS, and ThinkPad.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.8,
+          "reason": "The response provides a list of recommended laptops for programming, including details such as brand, model, processor, RAM, storage, and price. It also includes criteria for choosing between brands and models based on personal preferences.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    },
+    {
+      "test_case": "Support Ticket",
+      "timestamp": "2026-01-24T12:26:23.736425",
+      "response_length": 216,
+      "detected_tools": [
+        "db_query",
+        "web_search"
+      ],
+      "expected_tools": [
+        "db_query"
+      ],
+      "metrics": {
+        "tool_correctness": {
+          "metric": "tool_correctness",
+          "score": 0.2,
+          "reason": "The response does not address the query topic directly and is not helpful or accurate.",
+          "expected_tools": [
+            "db_query"
+          ],
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "answer_relevancy": {
+          "metric": "answer_relevancy",
+          "score": 0.0,
+          "reason": "The response does not provide any information about the purchase or how to assist with it.",
+          "response_length": 216,
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "faithfulness": {
+          "metric": "faithfulness",
+          "score": 0.5,
+          "reason": "The response does not fully represent the context information provided.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        },
+        "geval": {
+          "metric": "geval_correctness",
+          "score": 0.5,
+          "reason": "The response is helpful but lacks specific details about the user's purchase.",
+          "criteria": "The response should be helpful and relevant to the user's query.",
+          "model": "qwen2.5-coder:3b",
+          "evaluation_mode": "ollama"
+        }
+      }
+    }
+  ]
+}
