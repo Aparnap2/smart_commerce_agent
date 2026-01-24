@@ -185,69 +185,108 @@ async function executeDbQueryTool(
 }
 
 /**
- * Web search tool (MCP-style - simulated for now)
+ * Web search tool (MCP-style - uses document search via RAG)
  */
 async function executeWebSearchTool(query: string): Promise<ToolResult> {
   const startTime = Date.now();
   console.log(`[MCP_TOOL] 🔧 Executing web_search: "${query.substring(0, 50)}..."`);
 
-  // Simulated web search results
-  const results = {
-    query,
-    results: [
-      {
-        title: 'E-commerce FAQ',
-        url: 'https://example.com/faq',
-        snippet: 'Common questions about orders, shipping, and returns.',
-      },
-      {
-        title: 'Return Policy',
-        url: 'https://example.com/returns',
-        snippet: '30-day return policy for all items in original condition.',
-      },
-    ],
-    count: 2,
-  };
+  try {
+    // Use RAG document search instead of simulated web search
+    const { documentSearch } = await import('../../../lib/rag/service.ts');
 
-  return {
-    success: true,
-    data: results,
-    metadata: { executionTime: Date.now() - startTime },
-  };
+    const result = await documentSearch(query, {
+      limit: 5,
+      minScore: 0.2,
+      filter: { isActive: true },
+    });
+
+    if (result.error) {
+      return {
+        success: false,
+        error: result.error,
+        data: { results: [], total: 0 },
+        metadata: { executionTime: Date.now() - startTime },
+      };
+    }
+
+    const results = {
+      query,
+      results: result.results.map((r) => ({
+        title: r.title,
+        url: `#doc-${r.id}`,
+        snippet: r.content.substring(0, 200) + '...',
+        type: r.docType,
+      })),
+      count: result.total,
+    };
+
+    return {
+      success: true,
+      data: results,
+      metadata: { executionTime: Date.now() - startTime },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      data: { results: [], total: 0 },
+      metadata: { executionTime: Date.now() - startTime },
+    };
+  }
 }
 
 /**
- * Semantic search tool (MCP-style - simulated for now)
+ * Semantic search tool (MCP-style - now uses real RAG vector search)
  */
 async function executeSemanticSearchTool(query: string, userId: string): Promise<ToolResult> {
   const startTime = Date.now();
   console.log(`[MCP_TOOL] 🔧 Executing semantic_search: "${query.substring(0, 50)}..."`);
 
-  const results = {
-    query,
-    user_id: userId,
-    embeddings: [
-      {
-        id: 'PREF-001',
-        category: 'Electronics',
-        similarity: 0.92,
-        recent_purchases: ['Laptop', 'Headphones'],
-      },
-      {
-        id: 'PREF-002',
-        category: 'Books',
-        similarity: 0.85,
-        recent_purchases: ['Novels', 'Self-help'],
-      },
-    ],
-    count: 2,
-  };
+  try {
+    // Use RAG vector search instead of simulated results
+    const { vectorSearch } = await import('../../../lib/rag/service.ts');
 
-  return {
-    success: true,
-    data: results,
-    metadata: { executionTime: Date.now() - startTime },
-  };
+    const result = await vectorSearch(query, {
+      limit: 10,
+      minScore: 0.1,
+    });
+
+    if (result.error) {
+      return {
+        success: false,
+        error: result.error,
+        data: { results: [], total: 0 },
+        metadata: { executionTime: Date.now() - startTime },
+      };
+    }
+
+    const results = {
+      query,
+      user_id: userId,
+      products: result.results.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        similarity: p.similarity,
+        price: p.price,
+      })),
+      count: result.total,
+    };
+
+    return {
+      success: true,
+      data: results,
+      metadata: { executionTime: Date.now() - startTime },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      data: { results: [], total: 0 },
+      metadata: { executionTime: Date.now() - startTime },
+    };
+  }
 }
 
 // ============================================================================
@@ -292,10 +331,14 @@ export async function POST(req: Request): Promise<Response> {
 
     // Extract email for database queries
     if (needsDbQuery) {
-      const emailMatch = lowerContent.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
-      userEmail = emailMatch ? emailMatch[1] : null;
+      // More robust email extraction
+      const emailMatch = lowerContent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      userEmail = emailMatch ? emailMatch[0] : null;
       if (userEmail) {
         userId = userEmail; // Use email as user ID for MCP tools
+        console.log(`[CHAT_API] 📧 Extracted email: ${userEmail}`);
+      } else {
+        console.log('[CHAT_API] ⚠️ No email found in query');
       }
     }
 
@@ -347,11 +390,16 @@ export async function POST(req: Request): Promise<Response> {
       toolResults.push({ name: 'semantic_search', result });
 
       if (result.success && result.data) {
-        const data = result.data as { embeddings: Array<{ category: string; similarity: number; recent_purchases: string[] }> };
-        toolContext += '\n\n## 🧠 Semantic Search (Preferences):\n' +
-          data.embeddings.map((e) =>
-            `- Category: ${e.category} (${(e.similarity * 100).toFixed(0)}% match)\n  Recent: ${e.recent_purchases.join(', ')}`
-          ).join('\n');
+        const data = result.data as { results: Array<{ id: number; name: string; description?: string; price: number; similarity: number }>, total: number };
+        if (data.results && data.results.length > 0) {
+          toolContext += '\n\n## 🧠 Semantic Search (Products):\n' +
+            data.results.map((p) =>
+              `- **${p.name}** (${(p.similarity * 100).toFixed(0)}% match)\n  Price: $${p.price?.toFixed(2) || 'N/A'}\n  ${p.description ? `Description: ${p.description.substring(0, 100)}...` : ''}`
+            ).join('\n\n');
+          toolContext += `\n\n*Found ${data.total} matching product(s)*`;
+        } else {
+          toolContext += '\n\n## 🧠 Semantic Search (Products):\nNo matching products found in the database.';
+        }
       }
     }
 
@@ -367,23 +415,23 @@ export async function POST(req: Request): Promise<Response> {
 
     const systemPrompt = `You are TechTrend Support AI.
 
-## Current Date: ${new Date().toISOString().split('T')[0]}
+## CRITICAL: TOOL USAGE IS MANDATORY
 
-## MCP Tools Available:
-- **db_query**: Query database for orders, products, customers, or support tickets
-- **web_search**: Search the web for policies, FAQs, and general information
-- **semantic_search**: Search user preferences for personalized recommendations
+When users ask about ORDERS, PRODUCTS, CUSTOMERS, or TICKETS, you MUST use the provided database results. Do NOT deflect or say you can't access data - the data has ALREADY been retrieved for you below.
+
+## Tool Context (already executed):
+${toolContext || 'No database query was triggered. If the user is asking about orders/products/tickets, use a generic helpful response.'}
+
+## Response Rules:
+1. ALWAYS use the database results above when available
+2. Format data as markdown tables or bullet points
+3. If no results were found, say "I couldn't find any matching records in the database" - DO NOT claim you can't access data
+4. Do NOT say "as an AI language model I don't have access" - you DO have access via the database
 
 ## Guidelines:
 - Be helpful and professional
 - Use markdown formatting
-- For data queries, use the database results provided${toolContext}
-
-## Response Style:
-- Use bullet points for lists
-- Use tables for structured data
-- Be concise but complete
-- If you need more information, ask clarifying questions`;
+- For data queries, use ONLY the database results provided above`
 
     const chatMessages = [
       { role: 'system' as const, content: systemPrompt },
