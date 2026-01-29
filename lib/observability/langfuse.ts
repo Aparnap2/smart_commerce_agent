@@ -108,12 +108,28 @@ export function initializeLangfuse(config?: Partial<LangfuseConfig>): Langfuse {
  * Create a no-op client for when Langfuse is not configured
  */
 function createNoOpClient(): Langfuse {
+  const noopSpan = {
+    end: () => noopSpan,
+    flush: async () => {},
+    update: () => noopSpan,
+    event: () => noopSpan,
+    generation: () => noopSpan,
+    span: () => noopSpan,
+    score: () => noopSpan,
+  };
+
+  const noopTrace = {
+    end: () => noopTrace,
+    flush: async () => {},
+    update: () => noopTrace,
+    event: () => noopTrace,
+    generation: () => noopSpan,
+    span: () => noopSpan,
+    score: () => noopTrace,
+  };
+
   return {
-    trace: () => ({
-      end: () => {},
-      flush: async () => {},
-      update: () => {},
-    }),
+    trace: () => noopTrace,
     shutdown: async () => {},
   } as unknown as Langfuse;
 }

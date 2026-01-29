@@ -150,7 +150,7 @@ Respond with a JSON object:
     };
   } catch (error) {
     console.error('[Scoring] LLM evaluation error:', error);
-    return createFallbackScoring(query, response, startTime - Date.now());
+    return createFallbackScoring(query, response, Date.now() - startTime);
   }
 }
 
