@@ -120,15 +120,17 @@ function ExecutingSpinner({ speed = 200 }: { speed?: number }): React.ReactEleme
 /**
  * Tool Call Event Item Component
  */
-function ToolCallEventItem({
-  event,
-  showExecutionTime = true,
-  onClick,
-}: {
+interface ToolCallEventItemProps {
   event: ToolCallEvent;
   showExecutionTime: boolean;
   onClick?: () => void;
-}): React.ReactElement {
+}
+
+const ToolCallEventItem: React.FC<ToolCallEventItemProps> = ({
+  event,
+  showExecutionTime,
+  onClick,
+}) => {
   const icon = getStatusIcon(event.status);
   const colorClass = getStatusColor(event.status);
   const displayName = getToolDisplayName(event.tool);

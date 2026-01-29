@@ -16,6 +16,7 @@ export const IntentTypeSchema = z.enum([
   'refund_request',
   'order_inquiry',
   'product_search',
+  'inventory_check',
   'ticket_create',
   'general_support',
 ]);

@@ -23,11 +23,19 @@ export {
 
 // LangGraph Integration
 export {
-  RedisCheckpointSaver,
-  MemoryCheckpointSaver,
-  createCheckpointSaver,
-  getDefaultCheckpointSaver,
-  type RedisCheckpointMetadata,
+  createCheckpointer,
+  initializeCheckpointService,
+  initializeRedisCheckpointer,
+  initializePostgresCheckpointer,
+  healthCheckRedis,
+  healthCheckPostgres,
+  healthCheckAll,
+  getCheckpointStats,
+  closeRedisCheckpointer,
+  closePostgresCheckpointer,
+  closeAllCheckpointers,
+  createThreadConfig,
+  type CheckpointConfig,
 } from './langgraph-checkpoint';
 
 // Logger (internal use)

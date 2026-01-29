@@ -79,7 +79,16 @@ This project uses **OpenAI SDK** directly with **Ollama's OpenAI-compatible API*
 
 ## 🚀 Quick Start
 
-### 1. **Clone and install**
+### One-Command Setup
+
+```bash
+# Start all infrastructure + install deps + seed database
+make quick-start
+```
+
+### Manual Setup
+
+#### 1. **Clone and install**
 
 ```bash
 git clone https://github.com/Aparnap2/smart_commerce_agent.git
@@ -87,61 +96,133 @@ cd vercel-ai-sdk
 pnpm install
 ```
 
-### 2. **Start PostgreSQL with pgvector**
+#### 2. **Start Infrastructure**
 
 ```bash
-docker run -d --name postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=smart_commerce \
-  -p 5432:5432 \
-  pgvector/pgvector:pg17
+# Start all Docker services (PostgreSQL, Redis, Qdrant, Ollama, Netdata, Langfuse)
+make infra-up
 
-# Initialize Prisma
-npx prisma db push
-npx prisma generate
+# Or manually with the startup script
+./scripts/start-infrastructure.sh start
 ```
 
-### 3. **Start Redis (optional, for LangGraph)**
+#### 3. **Initialize Database**
 
 ```bash
-docker run -d --name redis \
-  -p 6379:6379 \
-  redis:alpine
+make db-migrate
+make db-seed
 ```
 
-### 4. **Configure environment**
-
-```bash
-# .env.local
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/smart_commerce"
-REDIS_URL="redis://localhost:6379"
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="qwen2.5-coder:3b"
-```
-
-### 5. **Start Ollama**
-
-```bash
-ollama pull qwen2.5-coder:3b
-ollama serve
-```
-
-### 6. **Run the app**
+#### 4. **Run the App**
 
 ```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and try:
+---
 
-- "Show me my orders for john@example.com"
-- "What laptops do you have?"
-- "Recommend a laptop for programming"
-- "What's your return policy?"
+## 🛠️ Infrastructure Management
+
+### Available Make Commands
+
+| Command | Description |
+|---------|-------------|
+| `make infra-up` | Start all Docker containers |
+| `make infra-down` | Stop all containers |
+| `make infra-status` | Show running services |
+| `make infra-restart` | Restart all services |
+| `make quick-start` | Full setup: infra + install + migrate + seed |
+| `make dev` | Start development server |
+| `make build` | Build for production |
+| `make test` | Run test suite |
+
+### Docker Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| PostgreSQL | 5432 | Primary database with pgvector |
+| Redis | 6379 | State caching & LangGraph checkpoints |
+| Qdrant | 6333 | Vector database for semantic search |
+| Ollama | 11434 | Local LLM inference |
+| Netdata | 19999 | Monitoring dashboard |
+| Langfuse | 3000 | Observability & tracing |
+
+### Startup Script Options
+
+```bash
+./scripts/start-infrastructure.sh start    # Start all services
+./scripts/start-infrastructure.sh stop     # Stop all services
+./scripts/start-infrastructure.sh status   # Show service status
+./scripts/start-infrastructure.sh restart  # Restart services
+./scripts/start-infrastructure.sh logs     # Show logs
+```
 
 ---
 
-## 🧠 Architecture
+## 🧠 LangGraph Agent Architecture
+
+The supervisor agent uses LangGraph for workflow orchestration:
+
+```
+User Message
+    ↓
+Intent Classification (LLM)
+    ↓
+┌─────────────────────────────────────┐
+│  Product Search → Qdrant Vector DB  │
+│  Inventory Check → PostgreSQL       │
+│  Order Lookup → PostgreSQL          │
+│  Refund Request → Human Approval    │
+└─────────────────────────────────────┘
+    ↓
+Response Generation (LLM)
+    ↓
+Langfuse Tracing & Scoring
+```
+
+### Checkpointer Configuration
+
+State persistence via configurable checkpointers:
+
+```bash
+# Use Redis (default for production)
+CHECKPOINT_TYPE=redis
+REDIS_URL=redis://localhost:6379
+
+# Use PostgreSQL
+CHECKPOINT_TYPE=postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/smart_commerce
+
+# Use Memory (development only)
+CHECKPOINT_TYPE=memory
+```
+
+---
+
+## 📊 Observability (Langfuse)
+
+Comprehensive tracing and scoring:
+
+```bash
+# Configure Langfuse
+LANGFUSE_PUBLIC_KEY=your-key
+LANGFUSE_SECRET_KEY=your-secret
+LANGFUSE_BASE_URL=http://localhost:3000
+```
+
+### Scoring Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Relevance | Does response address the query? |
+| Accuracy | Is information factually correct? |
+| Completeness | Are all necessary details provided? |
+| Coherence | Is the response logically organized? |
+| Helpfulness | Would this satisfy the customer? |
+
+---
+
+## 📁 Project Structure
 
 ### Chat Flow (MCP-Style Tools)
 

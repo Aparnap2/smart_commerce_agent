@@ -193,7 +193,7 @@ async function executeWebSearchTool(query: string): Promise<ToolResult> {
 
   try {
     // Use RAG document search instead of simulated web search
-    const { documentSearch } = await import('../../../lib/rag/service.ts');
+    const { documentSearch } = await import('../../../lib/rag/service');
 
     const result = await documentSearch(query, {
       limit: 5,
@@ -245,7 +245,7 @@ async function executeSemanticSearchTool(query: string, userId: string): Promise
 
   try {
     // Use RAG vector search instead of simulated results
-    const { vectorSearch } = await import('../../../lib/rag/service.ts');
+    const { vectorSearch } = await import('../../../lib/rag/service');
 
     const result = await vectorSearch(query, {
       limit: 10,

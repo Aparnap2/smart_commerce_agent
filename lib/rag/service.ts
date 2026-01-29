@@ -13,7 +13,7 @@
  */
 
 import { queryDatabase } from '../tools/database.js';
-import { logger } from '../redis/logger.ts';
+import { logger } from '../redis/logger';
 import { env } from '../env.js';
 
 // ============================================================================

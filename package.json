@@ -17,6 +17,9 @@
     "@ai-sdk/react": "^3.0.51",
     "@langchain/google-genai": "^0.2.5",
     "@langchain/langgraph": "^0.2.21",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.0",
+    "@langchain/langgraph-checkpoint-redis": "^1.0.1",
+    "@langfuse/langchain": "^4.5.1",
     "@modelcontextprotocol/sdk": "^1.11.0",
     "@neondatabase/serverless": "^1.0.0",
     "@prisma/adapter-pg": "^6.7.0",
@@ -27,6 +30,7 @@
     "framer-motion": "^12.12.1",
     "ioredis": "^5.9.1",
     "langchain": "^0.3.24",
+    "langfuse": "^3.38.6",
     "lucide-react": "^0.511.0",
     "nanoid": "^5.1.5",
     "next": "15.3.1",
@@ -56,6 +60,7 @@
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^30.0.0",
+    "@vitejs/plugin-react": "^5.1.2",
     "babel-jest": "^30.2.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.1",
@@ -63,6 +68,8 @@
     "prisma": "6.7.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.6",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "vite-tsconfig-paths": "^6.0.5",
+    "vitest": "^4.0.18"
   }
 }

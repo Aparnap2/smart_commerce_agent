@@ -1,35 +1,56 @@
-version: '3.8'
 services:
+  # ============================================
+  # Core Infrastructure
+  # ============================================
+
+  # Primary Database with pgvector (PostgreSQL 15 for compatibility)
   postgres:
-    image: postgres:15
-    container_name: vercel_ai_postgres
+    image: pgvector/pgvector:pg15
+    container_name: smart-commerce-postgres
     environment:
-      POSTGRES_DB: vercel_ai
-      POSTGRES_USER: vercel_user
-      POSTGRES_PASSWORD: vercel_pass
+      POSTGRES_DB: smart_commerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vercel_user -d vercel_ai"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_commerce"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
+  # ============================================
+  # State & Checkpointing
+  # ============================================
+
+  # Redis for LangGraph checkpointing
+  redis:
+    image: redis:7-alpine
+    container_name: smart-commerce-redis
     ports:
-      - "11434:11434"
+      - "6379:6379"
     volumes:
-      - ollama_data:/root/.ollama
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:11434"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+# ============================================
+# Volumes
+# ============================================
 volumes:
   postgres_data:
-  ollama_data:
+  redis_data:
+
+# ============================================
+# External Services (managed separately)
+# ============================================
+# - Ollama: running at localhost:11434
+#   Start with: docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+# - Qdrant: echoteam-qdrant at localhost:6333
+# - Netdata: netdata at localhost:19999
