@@ -506,9 +506,106 @@ function createFallbackScoring(query: string, response: string) {
 |---------|------|--------|---------|
 | 1.0 | 2024-01-22 | Smart Commerce Agent Team | Initial ADRs |
 
+---
+
+## ADR-009: Cloud-Native Free Tier Architecture
+
+**Date:** 2024-01-30
+**Status:** Accepted
+
+### Context
+
+Deploying the Smart Commerce Agent on a $0 budget requires avoiding heavy self-hosted infrastructure:
+- Docker containers for PostgreSQL/Redis/Qdrant consume ~2GB RAM
+- Free tier VPS (512MB RAM) cannot run the full stack
+- Serverless platforms offer free tiers with identical APIs
+
+### Decision
+
+Adopt a **hybrid cloud architecture** using serverless free tiers:
+
+| Component | Local Docker | Cloud (Free) | Notes |
+|-----------|--------------|--------------|-------|
+| Database | pgvector/PostgreSQL | **Neon.tech** | Serverless Postgres, 100GB storage |
+| State Store | Redis | **Neon Postgres** | LangGraph uses Postgres checkpointer |
+| Vector DB | Qdrant | **Qdrant Cloud** | Free cluster, 1GB storage |
+| Observability | Langfuse (self) | **Langfuse Cloud** | 50K traces/month free |
+| Hosting | Docker | **Vercel + Render** | Next.js + Workers |
+
+### Reasoning
+
+1. **Cost**: $0 monthly cost for all infrastructure
+2. **Compatibility**: Neon uses standard PostgreSQL protocol
+3. **Scalability**: Serverless auto-scales (within free limits)
+4. **Developer Experience**: Same code works locally and on cloud
+
+### Implementation Details
+
+```typescript
+// lib/redis/langgraph-checkpoint.ts
+function buildPostgresPoolOptions(config?: CheckpointConfig): PoolConfig {
+  const connectionString = config?.postgresUrl || env.DATABASE_URL;
+
+  // Neon detection for optimized pool sizing
+  const isNeon = connectionString.includes('neon.tech');
+  const maxConnections = isNeon ? (env.NEON_POOL_MAX || 5) : 10;
+
+  return {
+    connectionString,
+    max: maxConnections,
+    idleTimeoutMillis: env.NEON_IDLE_TIMEOUT || 30000,
+    connectionTimeoutMillis: 10000,
+  };
+}
+```
+
+**Environment Configuration:**
+```bash
+# Neon Postgres (required for production)
+DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/db
+
+# Checkpointer type
+CHECKPOINT_TYPE=postgres
+
+# Neon pool settings (serverless-optimized)
+NEON_POOL_MAX=5
+NEON_POOL_MIN=0
+NEON_IDLE_TIMEOUT=30000
+```
+
+### Consequences
+
+**Benefits:**
+- Zero infrastructure costs
+- Automatic backups (Neon)
+- No server maintenance
+- Global availability
+
+**Drawbacks:**
+- Cold starts on serverless platforms
+- Connection limits (Neon: 100 concurrent)
+- Cannot run local Docker stack on cloud
+
+### Migration Path
+
+1. Keep `docker-compose.yml` for local development
+2. Add cloud-specific environment variables to `lib/env.js`
+3. Deploy to Vercel (frontend) + Render (workers)
+4. Point `DATABASE_URL` to Neon
+
+### References
+
+- [Neon Free Tier](https://neon.tech/docs/introduction/free-tier)
+- [Vercel Serverless](https://vercel.com/docs/serverless-functions)
+- [Render Free Tier](https://render.com/docs/free)
+
+---
+
 ## References
 
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Qdrant Documentation](https://qdrant.tech/documentation/)
 - [Ollama Documentation](https://ollama.com/)
 - [Langfuse Documentation](https://langfuse.com/docs/)
+- [Neon Serverless Postgres](https://neon.tech/docs/introduction)
+- [Vercel Deployment](https://nextjs.org/docs/deployment)

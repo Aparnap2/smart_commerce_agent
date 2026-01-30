@@ -160,15 +160,23 @@ export async function initializeRedisCheckpointer(config?: CheckpointConfig): Pr
 
 /**
  * Build Postgres pool options from environment
+ *
+ * For Neon serverless deployment, use smaller pool sizes to avoid
+ * connection limit issues. Neon free tier allows 100 connections.
  */
 function buildPostgresPoolOptions(config?: CheckpointConfig): PoolConfig {
   const connectionString = config?.postgresUrl || env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/smart_commerce';
 
+  // Neon serverless: use smaller pool (free tier: 100 connections max)
+  // Local dev: larger pool for better performance
+  const isNeon = connectionString.includes('neon.tech') || connectionString.includes('neon postgres');
+  const maxConnections = isNeon ? (env.NEON_POOL_MAX || 5) : 10;
+
   return {
     connectionString,
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    max: maxConnections,
+    idleTimeoutMillis: env.NEON_IDLE_TIMEOUT || 30000,
+    connectionTimeoutMillis: 10000, // Longer timeout for serverless
   };
 }
 
