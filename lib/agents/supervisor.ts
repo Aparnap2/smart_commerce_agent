@@ -32,12 +32,19 @@ import {
   refundRequest,
   ProductSearchInput,
   InventoryCheckInput,
+  OrderLookupInputSchema,
+  RefundRequestInputSchema,
 } from './tools';
 import {
   createCheckpointer,
   createThreadConfig,
   type AnyCheckpointer,
 } from '@/lib/redis/langgraph-checkpoint';
+import {
+  createChatCompletion,
+  getLLMProviderInfo,
+  type ChatMessage,
+} from '@/lib/llm/provider';
 
 /**
  * Define the state schema for LangGraph using Annotation
@@ -96,7 +103,6 @@ const StateAnnotation = Annotation.Root({
  */
 function createToolNode(): ToolNode {
   // Create LangChain tools using the `tool` function with Zod schemas
-  // Cast to any to avoid Zod v4 type incompatibilities with ToolNode
   const tools = [
     tool(
       async (input: ProductSearchInput) => {
@@ -130,40 +136,30 @@ function createToolNode(): ToolNode {
       }
     ),
     tool(
-      async (input: { orderId?: string; email?: string; status?: string; limit?: number }) => {
+      async (input: z.infer<typeof OrderLookupInputSchema>) => {
         console.log(`[Tool] 📋 order_lookup:`, input);
-        return orderLookup(input as any);
+        return orderLookup(input);
       },
       {
         name: 'order_lookup',
         description: 'Look up customer orders by order ID, email, or status. Use for tracking and order-related queries.',
-        schema: z.object({
-          orderId: z.string().optional().describe('Specific order ID'),
-          email: z.string().email().optional().describe('Customer email'),
-          status: z.enum(['pending', 'processing', 'shipped', 'delivered', 'cancelled']).optional().describe('Order status filter'),
-          limit: z.number().int().positive().default(10).describe('Maximum results'),
-        }),
+        schema: OrderLookupInputSchema,
       }
     ),
     tool(
-      async (input: { orderId: string; amount: number; reason: string; idempotencyKey: string }) => {
+      async (input: z.infer<typeof RefundRequestInputSchema>) => {
         console.log(`[Tool] 💰 refund_request: Order ${input.orderId}, Amount $${input.amount}`);
-        return refundRequest(input as any);
+        return refundRequest(input);
       },
       {
         name: 'refund_request',
         description: 'Process a refund request. Requires order ID, amount, and reason. Always confirm with user before processing.',
-        schema: z.object({
-          orderId: z.string().describe('Order ID to refund'),
-          amount: z.number().positive().describe('Refund amount'),
-          reason: z.string().min(10).describe('Reason for refund (min 10 chars)'),
-          idempotencyKey: z.string().uuid().describe('UUID for idempotency'),
-        }),
+        schema: RefundRequestInputSchema,
       }
     ),
-  ] as any;
+  ];
 
-  return new ToolNode(tools);
+  return new ToolNode(tools as any);
 }
 
 // ============================================
@@ -179,15 +175,13 @@ async function classifyIntentNode(state: typeof StateAnnotation.State): Promise<
   console.log(`[Supervisor] 🔍 Classifying: "${lastMessage.substring(0, 50)}..."`);
 
   try {
-    const response = await fetch(`${env.OLLAMA_BASE_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an intent classifier for an e-commerce support system.
+    const providerInfo = getLLMProviderInfo();
+    console.log(`[Supervisor] 🤖 Using LLM provider: ${providerInfo.provider}/${providerInfo.model}`);
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `You are an intent classifier for an e-commerce support system.
 
 Classify the user query into one of:
 - product_search: "find/show/recommend products", "what do you have"
@@ -197,18 +191,17 @@ Classify the user query into one of:
 - general_support: "other questions"
 
 Respond with JSON: {"intent": "...", "confidence": 0.x, "reasoning": "..."}`
-          },
-          { role: 'user', content: lastMessage },
-        ],
-        temperature: 0.1,
-        format: { type: 'json_object' },
-      }),
+      },
+      { role: 'user', content: lastMessage },
+    ];
+
+    const response = await createChatCompletion({
+      messages,
+      temperature: 0.1,
+      format: 'json_object',
     });
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '{}';
-
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(response.content);
     const intent = parsed.intent || 'general_support';
     const confidence = parsed.confidence || 0.5;
 
@@ -216,7 +209,7 @@ Respond with JSON: {"intent": "...", "confidence": 0.x, "reasoning": "..."}`
 
     return {
       intent: {
-        intent: intent as any,
+        intent: intent as IntentClassification['intent'],
         confidence,
         extracted_entities: {},
         suggested_routing: intent === 'refund_request' ? 'refund' : 'tool',
@@ -227,7 +220,7 @@ Respond with JSON: {"intent": "...", "confidence": 0.x, "reasoning": "..."}`
     console.error('[Supervisor] ❌ Classification failed:', error);
     return {
       intent: {
-        intent: 'general_support',
+        intent: 'general_support' as const,
         confidence: 0.5,
         extracted_entities: {},
         suggested_routing: 'ui',
@@ -338,27 +331,23 @@ async function processToolResults(state: typeof StateAnnotation.State): Promise<
       ? `\n\n## Tool Results:\n${JSON.stringify(toolResults, null, 2)}`
       : '';
 
-    const response = await fetch(`${env.OLLAMA_BASE_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
-        messages: [
-          {
-            role: 'system',
-            content: `You are TechTrend Support AI. Use the tool results to answer the user's question.
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `You are TechTrend Support AI. Use the tool results to answer the user's question.
 Format responses as markdown with tables for data.
 If no results found, say "I couldn't find matching records."
 ${toolContext}`
-          },
-          { role: 'user', content: lastMessage },
-        ],
-        temperature: 0.7,
-      }),
+      },
+      { role: 'user', content: lastMessage },
+    ];
+
+    const response = await createChatCompletion({
+      messages,
+      temperature: 0.7,
     });
 
-    const data = await response.json();
-    const responseText = data.choices?.[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+    const responseText = response.content || 'I apologize, but I was unable to generate a response.';
 
     console.log(`[UIAgent] ✅ Response generated (${responseText.length} chars)`);
 
@@ -393,24 +382,20 @@ async function directResponseNode(state: typeof StateAnnotation.State): Promise<
   console.log(`[UIAgent] 💬 Direct response for: "${lastMessage.substring(0, 30)}..."`);
 
   try {
-    const response = await fetch(`${env.OLLAMA_BASE_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are TechTrend Support AI. Be helpful, concise, and friendly. Format responses with markdown.'
-          },
-          { role: 'user', content: lastMessage },
-        ],
-        temperature: 0.7,
-      }),
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: 'You are TechTrend Support AI. Be helpful, concise, and friendly. Format responses with markdown.'
+      },
+      { role: 'user', content: lastMessage },
+    ];
+
+    const response = await createChatCompletion({
+      messages,
+      temperature: 0.7,
     });
 
-    const data = await response.json();
-    const responseText = data.choices?.[0]?.message?.content || 'How can I help you today?';
+    const responseText = response.content || 'How can I help you today?';
 
     return {
       messages: [{
@@ -464,7 +449,9 @@ function shouldContinueAfterTools(state: typeof StateAnnotation.State): 'generat
 // Graph Construction
 // ============================================
 
-export async function createSupervisorGraph(checkpointer?: any): Promise<any> {
+export async function createSupervisorGraph(
+  checkpointer?: AnyCheckpointer
+) {
   console.log('[Supervisor] 🏗️ Building supervisor graph with tools...');
 
   const workflow = new StateGraph(StateAnnotation);
@@ -475,7 +462,7 @@ export async function createSupervisorGraph(checkpointer?: any): Promise<any> {
   workflow.addNode('tools', createToolNode());
   workflow.addNode('generate_response', processToolResults);
   workflow.addNode('direct_response', directResponseNode);
-  workflow.addNode('human_review', async (state) => ({
+  workflow.addNode('human_review', async (_state) => ({
     messages: [{
       id: crypto.randomUUID(),
       role: 'ai',
@@ -546,7 +533,7 @@ export async function runSupervisor(
       timestamp: Date.now(),
     }],
     intent: undefined,
-    currentAgent: 'supervisor',
+    currentAgent: 'supervisor' as const,
     toolResults: [],
     pendingToolCalls: [],
     error: undefined,
@@ -562,7 +549,7 @@ export async function runSupervisor(
   try {
     const result = await graph.invoke(initialState, config);
     console.log(`[Supervisor] ✅ Graph execution complete`);
-    return result;
+    return result as typeof StateAnnotation.State;
   } catch (error) {
     console.error('[Supervisor] ❌ Graph execution failed:', error);
     throw error;
