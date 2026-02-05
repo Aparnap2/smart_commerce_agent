@@ -18,6 +18,8 @@ import {
   CreditCard
 } from 'lucide-react';
 import { useState } from 'react';
+import { LogoutButton } from '@/components/logout-button';
+import { useAuth } from '@/components/auth-provider';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -123,10 +125,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Link>
               );
             })}
-            <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all duration-200">
-              <LogOut className="w-5 h-5 flex-shrink-0" />
+            <LogoutButton className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg">
               {!sidebarCollapsed && <span className="font-medium">Logout</span>}
-            </button>
+            </LogoutButton>
           </div>
         </div>
       </aside>
