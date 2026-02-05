@@ -21,7 +21,9 @@ vi.mock('../../lib/env.js', () => ({
 
 // Mock tools/database.js
 vi.mock('../../lib/tools/database.js', () => ({
-  queryDatabase: vi.fn().mockResolvedValue([]),
+  queryDatabase: vi.fn().mockResolvedValue([
+    { id: 1, name: 'Test Product', similarity: 0.95 },
+  ]),
 }));
 
 // Mock redis/logger.js
@@ -75,11 +77,13 @@ describe('RAG Service', () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         statusText: 'Service Unavailable',
+        text: vi.fn().mockResolvedValue('Service Unavailable'),
       });
 
       const { embedQuery } = await import('../../lib/rag/service.js');
       const result = await embedQuery('test query');
 
+      expect(result.error).toBeDefined();
       expect(result.error).toContain('Embedding API error');
     });
   });
@@ -97,12 +101,8 @@ describe('RAG Service', () => {
 
   describe('vectorSearch', () => {
     it('should return empty results when no embeddings exist', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0),
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce([]);
 
       const { vectorSearch } = await import('../../lib/rag/service.js');
       const result = await vectorSearch('laptop');
@@ -112,12 +112,10 @@ describe('RAG Service', () => {
     });
 
     it('should accept search options', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0.1),
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce([
+        { id: 1, name: 'Electronics Item', similarity: 0.9 },
+      ]);
 
       const { vectorSearch } = await import('../../lib/rag/service.js');
       const result = await vectorSearch('electronics', {
@@ -132,12 +130,10 @@ describe('RAG Service', () => {
 
   describe('documentSearch', () => {
     it('should search knowledge base documents', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0.05),
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce([
+        { id: 'doc-1', title: 'Return Policy', content: '...', similarity: 0.9 },
+      ]);
 
       const { documentSearch } = await import('../../lib/rag/service.js');
       const result = await documentSearch('return policy', { limit: 5 });
@@ -148,12 +144,10 @@ describe('RAG Service', () => {
 
   describe('ragQuery', () => {
     it('should have correct query structure', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0.05),
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce([
+        { id: 'doc-1', title: 'Return Policy', content: 'You can return items within 30 days.', similarity: 0.9 },
+      ]);
 
       const { ragQuery } = await import('../../lib/rag/service.js');
       const result = await ragQuery('What is the return policy for headphones?');
@@ -164,7 +158,8 @@ describe('RAG Service', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockRejectedValueOnce(new Error('Database error'));
 
       const { ragQuery } = await import('../../lib/rag/service.js');
       const result = await ragQuery('test query');
@@ -192,19 +187,15 @@ describe('RAG Service', () => {
 
   describe('indexProduct', () => {
     it('should call embedding API for product', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0.1),
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce([{ id: 'test-uuid' }]);
 
       const { indexProduct } = await import('../../lib/rag/service.js');
       const result = await indexProduct(1, 'Premium wireless headphones');
 
       // The result depends on mocked queryDatabase
-      expect(result.success).toBeDefined();
-      expect(result.embeddingId).toBeDefined();
+      expect(result.success).toBe(true);
+      expect(result.embeddingId).toBe('test-uuid');
     });
 
     it('should reject empty descriptions', async () => {
@@ -218,13 +209,8 @@ describe('RAG Service', () => {
 
   describe('indexDocument', () => {
     it('should call embedding API for document', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          embedding: Array(768).fill(0.05),
-          token_count: 50,
-        }),
-      });
+      const { queryDatabase } = await import('../../lib/tools/database.js');
+      (queryDatabase as vi.Mock).mockResolvedValueOnce({ id: 'doc-1' });
 
       const { indexDocument } = await import('../../lib/rag/service.js');
       const result = await indexDocument(

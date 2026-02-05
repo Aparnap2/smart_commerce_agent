@@ -1,0 +1,199 @@
+{
+  "info": {
+    "name": "E-Commerce Support API Mocks",
+    "version": "1.0.0",
+    "description": "Mock APIs for external services used in E2E tests"
+  },
+  "environments": [
+    {
+      "name": "local",
+      "uuid": "local-env",
+      "url": "http://localhost:3000",
+      "port": 3000,
+      "latency": 0
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "response": {
+        "body": "{\n  \"status\": \"healthy\",\n  \"timestamp\": \"${faker.iso8601}\",\n  \"services\": {\n    \"ollama\": \"${env.OLLAMA_URL}\",\n    \"supabase\": \"${env.SUPABASE_URL}\"\n  }\n}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/route-ollama",
+      "status": 200,
+      "response": {
+        "body": "{\n  \"id\": \"${faker.uuid}\",\n  \"object\": \"chat.completion\",\n  \"created\": \"${faker.unixTime}\",\n  \"model\": \"qwen2.5-coder:3b\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"This is a mock response for testing. In production, this routes to Ollama.\\n\\nTo use real Ollama, ensure the container is running on port 11434.\"\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 15,\n    \"completion_tokens\": 30,\n    \"total_tokens\": 45\n  }\n}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/stream",
+      "status": 200,
+      "response": {
+        "body": "data: {\\\"id\\\":\\\"${faker.uuid}\\\",\\\"object\\\":\\\"chat.completion.chunk\\\",\\\"created\\\":\\\"${faker.unixTime}\\\",\\\"model\\\":\\\"qwen2.5-coder:3b\\\",\\\"choices\\\":[{\\\"index\\\":0,\\\"delta\\\":{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"Mock\\\"},\\\"finish_reason\\\":null}]}\\n\\ndata: {\\\"id\\\":\\\"${faker.uuid}\\\",\\\"object\\\":\\\"chat.completion.chunk\\\",\\\"created\\\":\\\"${faker.unixTime}\\\",\\\"model\\\":\\\"qwen2.5-coder:3b\\\",\\\"choices\\\":[{\\\"index\\\":0,\\\"delta\\\":{\\\"content\\\":\\\" response\\\"},\\\"finish_reason\\\":null}]}\\n\\ndata: [DONE]",
+        "contentType": "text/event-stream"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/products",
+      "status": 200,
+      "response": {
+        "body": "[{\\\"id\\\":\\\"prod-001\\\",\\\"name\\\":\\\"Laptop Pro 15\\\",\\\"description\\\":\\\"High-performance laptop for professionals\\\",\\\"price\\\":1299.99,\\\"category\\\":\\\"Electronics\\\",\\\"stock\\\":50},{\\\"id\\\":\\\"prod-002\\\",\\\"name\\\":\\\"Wireless Mouse\\\",\\\"description\\\":\\\"Ergonomic wireless mouse with long battery life\\\",\\\"price\\\":49.99,\\\"category\\\":\\\"Accessories\\\",\\\"stock\\\":200},{\\\"id\\\":\\\"prod-003\\\",\\\"name\\\":\\\"USB-C Hub\\\",\\\"description\\\":\\\"7-in-1 USB-C hub with HDMI and ethernet\\\",\\\"price\\\":79.99,\\\"category\\\":\\\"Accessories\\\",\\\"stock\\\":75}]",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/:id",
+      "status": 200,
+      "response": {
+        "body": "{\\\"id\\\":\\\"${param.id}\\\",\\\"name\\\":\\\"Product ${param.id}\\\",\\\"description\\\":\\\"Mock product description\\\",\\\"price\\\":99.99,\\\"category\\\":\\\"General\\\",\\\"stock\\\":100}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/orders",
+      "status": 200,
+      "response": {
+        "body": "[{\\\"id\\\":\\\"ord-001\\\",\\\"customer_email\\\":\\\"test@example.com\\\",\\\"status\\\":\\\"shipped\\\",\\\"total\\\":199.99,\\\"created_at\\\":\\\"${faker.iso8601}\\\"},{\\\"id\\\":\\\"ord-002\\\",\\\"customer_email\\\":\\\"test@example.com\\\",\\\"status\\\":\\\"processing\\\",\\\"total\\\":79.99,\\\"created_at\\\":\\\"${faker.iso8601}\\\"}]",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/orders/:id",
+      "status": 200,
+      "response": {
+        "body": "{\\\"id\\\":\\\"${param.id}\\\",\\\"customer_email\\\":\\\"test@example.com\\\",\\\"status\\\":\\\"shipped\\\",\\\"total\\\":199.99,\\\"items\\\":[{\\\"name\\\":\\\"Product A\\\",\\\"quantity\\\":2,\\\"price\\\":99.99}],\\\"tracking_number\\\":\\\"TRK-${faker.numerify}\\\",\\\"created_at\\\":\\\"${faker.iso8601}\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/:id/refund",
+      "status": 200,
+      "response": {
+        "body": "{\\\"success\\\":true,\\\"refund_id\\\":\\\"ref-${faker.uuid}\\\",\\\"status\\\":\\\"pending\\\",\\\"amount\\\":99.99,\\\"message\\\":\\\"Refund request submitted for review\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/tickets",
+      "status": 200,
+      "response": {
+        "body": "[{\\\"id\\\":\\\"tkt-001\\\",\\\"subject\\\":\\\"Order not received\\\",\\\"status\\\":\\\"open\\\",\\\"priority\\\":\\\"high\\\",\\\"customer_email\\\":\\\"test@example.com\\\",\\\"created_at\\\":\\\"${faker.iso8601}\\\"}]",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tickets",
+      "status": 201,
+      "response": {
+        "body": "{\\\"id\\\":\\\"${faker.uuid}\\\",\\\"ticket_number\\\":\\\"TKT-${faker.date.recent}\\\",\\\"subject\\\":\\\"${body:subject}\\\",\\\"status\\\":\\\"open\\\",\\\"message\\\":\\\"Ticket created successfully\\\",\\\"created_at\\\":\\\"${faker.iso8601}\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tickets/:id",
+      "status": 200,
+      "response": {
+        "body": "{\\\"id\\\":\\\"${param.id}\\\",\\\"status\\\":\\\"${body.status}\\\",\\\"updated_at\\\":\\\"${faker.iso8601}\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tickets/:id/messages",
+      "status": 201,
+      "response": {
+        "body": "{\\\"id\\\":\\\"${faker.uuid}\\\",\\\"ticket_id\\\":\\\"${param.id}\\\",\\\"content\\\":\\\"${body.content}\\\",\\\"author_type\\\":\\\"customer\\\",\\\"created_at\\\":\\\"${faker.iso8601}\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/embeddings/generate",
+      "status": 200,
+      "response": {
+        "body": "{\\\"embedding\\\":[${faker.helpers.repeatize('0.1', 768)}],\\\"model\\\":\\\"nomic-embed-text:latest\\\",\\\"tokens\\\":10}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/search/semantic",
+      "status": 200,
+      "response": {
+        "body": "[{\\\"id\\\":\\\"prod-001\\\",\\\"name\\\":\\\"Laptop Pro 15\\\",\\\"similarity\\\":0.95,\\\"category\\\":\\\"Electronics\\\"},{\\\"id\\\":\\\"prod-002\\\",\\\"name\\\":\\\"Wireless Mouse\\\",\\\"similarity\\\":0.82,\\\"category\\\":\\\"Accessories\\\"}]",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/:productId",
+      "status": 200,
+      "response": {
+        "body": "{\\\"productId\\\":\\\"${param.productId}\\\",\\\"available\\\":true,\\\"quantity\\\":100,\\\"location\\\":\\\"main-warehouse\\\",\\\"restock_date\\\":null}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 200,
+      "response": {
+        "body": "{\\\"access_token\\\":\\\"${faker.jwt}\\\",\\\"refresh_token\\\":\\\"${faker.uuid}\\\",\\\"user\\\":{\\\"id\\\":\\\"${faker.uuid}\\\",\\\"email\\\":\\\"${body.email}\\\",\\\"role\\\":\\\"customer\\\"},\\\"session_id\\\":\\\"${faker.uuid}\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "status": 200,
+      "response": {
+        "body": "{\\\"message\\\":\\\"Logged out successfully\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/stripe",
+      "status": 200,
+      "response": {
+        "body": "{\\\"received\\\":true,\\\"type\\\":\\\"${body.type}\\\",\\\"message\\\":\\\"Webhook received\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/analytics/dashboard",
+      "status": 200,
+      "response": {
+        "body": "{\\\"total_orders\\\":1250,\\\"total_revenue\\\":125000,\\\"open_tickets\\\":15,\\\"avg_response_time\\\":\\\"2.5 hours\\\",\\\"customer_satisfaction\\\":4.5,\\\"period\\\":\\\"last_30_days\\\"}",
+        "contentType": "application/json"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/analytics/orders",
+      "status": 200,
+      "response": {
+        "body": "{\\\"labels\\\":[\\\"Mon\\\",\\\"Tue\\\",\\\"Wed\\\",\\\"Thu\\\",\\\"Fri\\\",\\\"Sat\\\",\\\"Sun\\\"],\\\"data\\\":[45,52,38,65,72,89,95]}",
+        "contentType": "application/json"
+      }
+    }
+  ],
+  "regexRoutes": []
+}

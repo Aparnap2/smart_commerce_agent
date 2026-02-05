@@ -235,11 +235,15 @@ describe('MCP RAG Tools', () => {
       const tools = createRAGTools();
       const tool = tools.get('index_document')!;
 
-      await expect(tool.execute({
+      // Tool should return error for empty title, not throw
+      const result = await tool.execute({
         title: '',
         content: 'Content',
         docType: 'policy',
-      }, null)).rejects.toThrow();
+      }, null);
+
+      expect(result).toHaveProperty('success');
+      expect(result.success).toBe(false);
     });
   });
 
