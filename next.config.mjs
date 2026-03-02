@@ -1,6 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Next.js config options here
+  transpilePackages: [
+    "@copilotkit/react-ui",
+    "@copilotkit/react-core",
+    "@copilotkit/runtime",
+    "streamdown",
+    "shiki"
+  ],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
 };
 
 export default nextConfig;

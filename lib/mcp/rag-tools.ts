@@ -11,6 +11,9 @@
 import { z } from 'zod';
 import type { Tool } from './types.js';
 import { createTool } from './server.js';
+import { transformQuery } from '../rag/query-transform.js';
+import { createSemanticCache, withCache } from '../rag/semantic-cache.js';
+import { getRedisClient } from '../redis/client.js';
 
 /**
  * RAG tools factory options
@@ -20,6 +23,10 @@ export interface RAGToolsOptions {
   rateLimiter?: {
     check: (userId: string, action: string) => Promise<{ allowed: boolean; remaining: number }>;
   };
+  /** Enable query transformation */
+  enableQueryTransform?: boolean;
+  /** Enable semantic caching */
+  enableCache?: boolean;
 }
 
 /**
@@ -27,6 +34,14 @@ export interface RAGToolsOptions {
  */
 export function createRAGTools(options: RAGToolsOptions = {}): Map<string, Tool> {
   const tools = new Map<string, Tool>();
+  const { enableQueryTransform = true, enableCache = true } = options;
+  
+  // Initialize semantic cache
+  const semanticCache = enableCache ? createSemanticCache({
+    redisClient: getRedisClient(),
+    ttlSeconds: 3600,
+    similarityThreshold: 0.95,
+  }) : null;
 
   // ========== VECTOR SEARCH TOOL ==========
 
@@ -154,18 +169,54 @@ export function createRAGTools(options: RAGToolsOptions = {}): Map<string, Tool>
       minScore: z.number().min(0).max(1).default(0.2).describe('Minimum relevance score'),
       includeProducts: z.boolean().default(true).describe('Whether to include product search'),
       includeDocuments: z.boolean().default(true).describe('Whether to include document search'),
+      useQueryTransform: z.boolean().default(true).describe('Enable query rewriting and HyDE'),
+      useCache: z.boolean().default(true).describe('Enable semantic caching'),
     }),
     requireUserId: false,
     execute: async (args) => {
       try {
         const { ragQuery } = await import('../rag/service.js');
 
-        const result = await ragQuery(args.query, {
+        let queryToUse = args.query;
+
+        // Apply query transformation if enabled
+        if (enableQueryTransform && args.useQueryTransform) {
+          const transformResult = await transformQuery(args.query, {
+            enableRewriting: true,
+            enableHyDE: true,
+          });
+          // Use the first rewritten query (or original if transformation failed)
+          queryToUse = transformResult.rewrittenQueries[0] || args.query;
+        }
+
+        // Use cache if enabled
+        if (enableCache && args.useCache && semanticCache) {
+          const cachedResult = await semanticCache.get(queryToUse);
+          if (cachedResult) {
+            return {
+              success: true,
+              data: {
+                context: (cachedResult as any).context || '',
+                sources: (cachedResult as any).sources || [],
+                totalResults: (cachedResult as any).totalResults || 0,
+                query: queryToUse,
+                fromCache: true,
+              },
+              metadata: {
+                executionTime: Date.now(),
+                cacheHit: true,
+              },
+            };
+          }
+        }
+
+        const result = await ragQuery(queryToUse, {
           productLimit: args.productLimit,
           documentLimit: args.documentLimit,
           minScore: args.minScore,
           includeProducts: args.includeProducts,
           includeDocuments: args.includeDocuments,
+          useReranking: true,
         });
 
         if (result.error) {
@@ -180,6 +231,15 @@ export function createRAGTools(options: RAGToolsOptions = {}): Map<string, Tool>
           };
         }
 
+        // Cache the result
+        if (enableCache && args.useCache && semanticCache) {
+          await semanticCache.set(queryToUse, [{
+            context: result.context,
+            sources: result.sources,
+            totalResults: result.totalResults,
+          }]);
+        }
+
         return {
           success: true,
           data: {
@@ -187,9 +247,12 @@ export function createRAGTools(options: RAGToolsOptions = {}): Map<string, Tool>
             sources: result.sources,
             totalResults: result.totalResults,
             query: result.query,
+            fromCache: false,
           },
           metadata: {
             executionTime: Date.now(),
+            cacheHit: false,
+            queryTransformed: queryToUse !== args.query,
           },
         };
       } catch (error) {

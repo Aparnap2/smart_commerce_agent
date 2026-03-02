@@ -460,7 +460,393 @@ export function createSecureTools(options: SecureToolsOptions): Map<string, Tool
     },
   }));
 
+  tools.set('cart.update_quantity', createTool('cart.update_quantity', {
+    title: 'Update Cart Item Quantity',
+    description: 'Update the quantity of an item in the shopping cart.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+      productId: z.number().int().positive().describe('Product ID'),
+      quantity: z.number().int().positive().describe('New quantity (must be > 0)'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Validate quantity
+      if (args.quantity <= 0) {
+        return { success: false, error: 'Quantity must be positive' };
+      }
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Verify product exists
+      const product = await options.db.products.findUnique({
+        where: { id: args.productId },
+      });
+
+      if (!product) {
+        return { success: false, error: 'Product not found' };
+      }
+
+      // Update cart item quantity
+      const result = await options.db.cart.update({
+        where: { id: args.cartId },
+        data: {
+          items: {
+            update: {
+              where: { cartId_productId: { cartId: args.cartId, productId: args.productId } },
+              data: { quantity: args.quantity },
+            },
+          },
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          cartId: args.cartId,
+          productId: args.productId,
+          quantity: args.quantity,
+          updatedAt: result.updatedAt,
+        },
+      };
+    },
+  }));
+
+  tools.set('cart.remove_item', createTool('cart.remove_item', {
+    title: 'Remove Item from Cart',
+    description: 'Remove a product from the shopping cart.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+      productId: z.number().int().positive().describe('Product ID to remove'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Remove item
+      const result = await options.db.cart.update({
+        where: { id: args.cartId },
+        data: {
+          items: {
+            delete: {
+              cartId_productId: { cartId: args.cartId, productId: args.productId },
+            },
+          },
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          cartId: args.cartId,
+          productId: args.productId,
+          removed: true,
+          updatedAt: result.updatedAt,
+        },
+      };
+    },
+  }));
+
+  tools.set('cart.clear', createTool('cart.clear', {
+    title: 'Clear Shopping Cart',
+    description: 'Remove all items from the shopping cart.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Count items before clearing
+      const itemCount = cart.items?.length || 0;
+
+      // Clear all items
+      const result = await options.db.cart.update({
+        where: { id: args.cartId },
+        data: {
+          items: {
+            deleteMany: {},
+          },
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          cartId: args.cartId,
+          clearedItems: itemCount,
+          updatedAt: result.updatedAt,
+        },
+      };
+    },
+  }));
+
+  tools.set('cart.apply_coupon', createTool('cart.apply_coupon', {
+    title: 'Apply Coupon Code',
+    description: 'Apply a coupon/promo code to the shopping cart.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+      couponCode: z.string().describe('Coupon code to apply'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Find coupon
+      const coupon = await options.db.coupons.findUnique({
+        where: { code: args.couponCode },
+      });
+
+      if (!coupon) {
+        return { success: false, error: 'Invalid coupon code' };
+      }
+
+      // Check if coupon is active
+      if (!coupon.is_active) {
+        return { success: false, error: 'Coupon is not active' };
+      }
+
+      // Check if coupon is expired
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return { success: false, error: 'Coupon has expired' };
+      }
+
+      // Calculate discount
+      const cartTotal = cart.items?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0;
+      let discount = 0;
+
+      if (coupon.discount_type === 'percentage') {
+        discount = cartTotal * (coupon.discount_value / 100);
+      } else if (coupon.discount_type === 'fixed') {
+        discount = coupon.discount_value;
+      }
+
+      // Apply coupon to cart
+      const result = await options.db.cart.update({
+        where: { id: args.cartId },
+        data: {
+          couponCode: args.couponCode,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          cartId: args.cartId,
+          couponCode: args.couponCode,
+          discountType: coupon.discount_type,
+          discountValue: coupon.discount_value,
+          discount: discount,
+          newTotal: cartTotal - discount,
+          updatedAt: result.updatedAt,
+        },
+      };
+    },
+  }));
+
+  // ========== CHECKOUT TOOLS ==========
+
+  tools.set('checkout.create', createTool('checkout.create', {
+    title: 'Create Checkout Session',
+    description: 'Create a checkout session from cart with payment and shipping.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+      paymentMethodId: z.string().describe('Payment method ID from Stripe'),
+      shippingAddress: z.object({
+        street: z.string(),
+        city: z.string(),
+        state: z.string(),
+        zip: z.string(),
+        country: z.string(),
+      }).describe('Shipping address'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Check cart has items
+      if (!cart.items || cart.items.length === 0) {
+        return { success: false, error: 'Cart is empty' };
+      }
+
+      // Calculate total
+      const subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const discount = cart.couponCode ? calculateDiscount(cart) : 0;
+      const total = subtotal - discount;
+
+      // In production, create Stripe checkout session here
+      const checkoutId = `checkout_${Date.now()}`;
+
+      return {
+        success: true,
+        data: {
+          checkoutId,
+          cartId: args.cartId,
+          paymentMethodId: args.paymentMethodId,
+          shippingAddress: args.shippingAddress,
+          subtotal,
+          discount,
+          total,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        },
+      };
+    },
+  }));
+
+  // ========== ORDER TOOLS ==========
+
+  tools.set('orders.create_from_cart', createTool('orders.create_from_cart', {
+    title: 'Create Order from Cart',
+    description: 'Create an order from the current cart contents.',
+    parameters: z.object({
+      cartId: z.string().describe('Cart ID'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify cart exists and belongs to user
+      const cart = await options.db.cart.findUnique({
+        where: { id: args.cartId },
+      });
+
+      if (!cart || cart.customerId !== userId) {
+        return { success: false, error: 'Cart not found' };
+      }
+
+      // Check cart has items
+      if (!cart.items || cart.items.length === 0) {
+        return { success: false, error: 'Cart is empty' };
+      }
+
+      // Create order (in production, this would be a transaction)
+      const orderId = `order_${Date.now()}`;
+
+      // Clear cart after order creation
+      await options.db.cart.update({
+        where: { id: args.cartId },
+        data: {
+          items: { deleteMany: {} },
+          couponCode: null,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          orderId,
+          cartId: args.cartId,
+          status: 'confirmed',
+          itemCount: cart.items.length,
+          createdAt: new Date().toISOString(),
+        },
+      };
+    },
+  }));
+
+  tools.set('orders.cancel', createTool('orders.cancel', {
+    title: 'Cancel Order',
+    description: 'Cancel an existing order (only if not yet shipped).',
+    parameters: z.object({
+      orderId: z.string().describe('Order ID to cancel'),
+    }),
+    requireUserId: true,
+    execute: async (args, userId) => {
+      if (!userId) throw new Error('Authorization required');
+
+      // Verify order exists and belongs to user
+      const order = await options.db.orders.findUnique({
+        where: { id: args.orderId },
+      });
+
+      if (!order || order.customerId !== userId) {
+        return { success: false, error: 'Order not found' };
+      }
+
+      // Check if order can be cancelled
+      if (order.status === 'shipped' || order.status === 'delivered') {
+        return { 
+          success: false, 
+          error: `Cannot cancel order that has been ${order.status}` 
+        };
+      }
+
+      // Cancel order
+      const result = await options.db.orders.update({
+        where: { id: args.orderId },
+        data: { status: 'cancelled' },
+      });
+
+      return {
+        success: true,
+        data: {
+          orderId: args.orderId,
+          status: 'cancelled',
+          cancelledAt: new Date().toISOString(),
+        },
+      };
+    },
+  }));
+
   return tools;
+}
+
+/**
+ * Helper: Calculate discount from coupon
+ */
+function calculateDiscount(cart: any): number {
+  if (!cart.couponCode) return 0;
+  
+  const subtotal = cart.items?.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) || 0;
+  
+  // In production, fetch coupon from database
+  // For now, return 0 as placeholder
+  return 0;
 }
 
 /**

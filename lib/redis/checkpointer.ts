@@ -16,7 +16,7 @@ import {
   checkRedisHealth,
   isRedisConfigured,
 } from './config';
-import { AgentState } from '../agents/state';
+import { type AgentStateType } from '../agents/state';
 
 /**
  * Checkpoint key prefix for LangGraph state
@@ -38,7 +38,7 @@ const THREAD_LIST_KEY = 'langgraph:threads';
  */
 export interface CheckpointData {
   /** The serialized agent state */
-  state: AgentState;
+  state: AgentStateType;
   /** Checkpoint timestamp */
   timestamp: number;
   /** Number of checkpoint saves */

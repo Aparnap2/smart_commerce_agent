@@ -11,7 +11,7 @@ export {
   OrderCard,
   OrderCardSkeleton,
   type OrderData,
-} from './order-card.js';
+} from './order-card';
 
 // Product components
 export {
@@ -19,7 +19,7 @@ export {
   ProductCardSkeleton,
   ProductGrid,
   type ProductData,
-} from './product-card.js';
+} from './product-card';
 
 // Ticket components
 export {
@@ -31,4 +31,4 @@ export {
   type TicketPriority,
   type TicketCategory,
   type TicketMessage,
-} from './ticket-status.js';
+} from './ticket-status';

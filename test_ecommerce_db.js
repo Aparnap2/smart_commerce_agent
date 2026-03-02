@@ -9,7 +9,7 @@ import { Client } from 'pg';
 
 console.log('🧪 Testing E-commerce Database Tool...\n');
 
-const connectionString = 'postgresql://vercel_user:vercel_pass@localhost:5433/vercel_ai';
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/smart_commerce';
 
 async function testEcommerceDatabase() {
   const client = new Client({

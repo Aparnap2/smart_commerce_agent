@@ -88,6 +88,13 @@ const statusConfig: Record<ProductStatus, { color: string; icon: React.ElementTy
   },
 };
 
+// Default status if mapping fails
+const defaultStatus = {
+  color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+  icon: Package,
+  label: 'Product',
+};
+
 // Format currency
 function formatPrice(price: number, currency: string = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
@@ -103,11 +110,10 @@ function StarRating({ rating, reviewCount }: { rating: number; reviewCount: numb
       {[1, 2, 3, 4, 5].map((star) => (
         <Star
           key={star}
-          className={`w-4 h-4 ${
-            star <= Math.round(rating)
+          className={`w-4 h-4 ${star <= Math.round(rating)
               ? 'text-amber-400 fill-amber-400'
               : 'text-gray-300 dark:text-gray-600'
-          }`}
+            }`}
         />
       ))}
       <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
@@ -298,7 +304,7 @@ export function ProductCard({
   showQuantitySelector = false,
   showActions = true,
 }: ProductCardProps) {
-  const status = statusConfig[product.status];
+  const status = statusConfig[product.status] || defaultStatus;
   const StatusIcon = status.icon;
   const canAddToCart = product.status === 'in_stock' || product.status === 'low_stock';
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { createClient } from '@/lib/supabase/create-client';
+import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { LogIn, Mail, Lock, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,15 +19,18 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const { error } = await createClient().auth.signInWithPassword({
+      const result = await signIn('credentials', {
         email,
         password,
+        redirect: false,
       });
 
-      if (error) {
-        setError(error.message);
+      if (result?.error) {
+        setError("Invalid email or password");
+        toast.error("Invalid email or password");
       } else {
-        router.push('/dashboard');
+        toast.success("Signed in successfully!");
+        router.push('/');
         router.refresh();
       }
     } catch (err) {

@@ -10,11 +10,14 @@
  * - Product and document indexing for semantic search
  * - Full RAG query pipeline for LLM context augmentation
  * - Connection pooling and health checks
+ * - Semantic chunking with similarity-based merging
  */
 
 import { queryDatabase } from '../tools/database.js';
 import { logger } from '../redis/logger';
 import { env } from '../env.js';
+import { semanticChunk } from './semantic-chunker.js';
+import { rerankCandidates, type RerankCandidate } from './reranker.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -371,6 +374,8 @@ export async function removeProductEmbedding(
 /**
  * Index a knowledge base document by chunking and embedding
  *
+ * Uses semantic chunking with sentence/paragraph boundaries and similarity-based merging.
+ *
  * @param title - Document title
  * @param content - Document content to index
  * @param docType - Document type (e.g., 'faq', 'policy', 'guide')
@@ -386,6 +391,7 @@ export async function indexDocument(
     metadata?: Record<string, unknown>;
     chunkSize?: number;
     chunkOverlap?: number;
+    useSemanticChunking?: boolean;
   } = {}
 ): Promise<{ success: boolean; documentId?: string; chunkCount?: number; error?: string }> {
   const config = getEmbeddingConfig();
@@ -394,6 +400,7 @@ export async function indexDocument(
     metadata = {},
     chunkSize = 500,
     chunkOverlap = 50,
+    useSemanticChunking = true,
   } = options;
 
   if (!title || !content) {
@@ -405,6 +412,7 @@ export async function indexDocument(
     contentLength: content.length,
     docType,
     chunkSize,
+    useSemanticChunking,
   });
 
   try {
@@ -418,8 +426,23 @@ export async function indexDocument(
 
     const documentId = docResult[0]?.id;
 
-    // Chunk the content
-    const chunks = chunkText(content, chunkSize, chunkOverlap);
+    // Chunk the content using semantic or legacy chunking
+    let chunks: string[];
+    if (useSemanticChunking) {
+      chunks = await semanticChunk(content, {
+        maxChunkSize: chunkSize,
+        chunkOverlap,
+        minChunkSize: Math.floor(chunkSize * 0.5),
+      });
+    } else {
+      chunks = chunkText(content, chunkSize, chunkOverlap);
+    }
+
+    logger.info('RAG', 'Content chunked', {
+      documentId,
+      chunkCount: chunks.length,
+      method: useSemanticChunking ? 'semantic' : 'legacy',
+    });
 
     // Generate embeddings and store chunks
     const chunkInserts = await Promise.all(
@@ -806,9 +829,10 @@ export async function documentSearch(
 
 /**
  * Execute full RAG query - retrieve context from both products and documents
+ * Uses cross-encoder reranking to improve result relevance.
  *
  * @param query - User query
- * @param options - Search options
+ * @param options - Search options including reranking configuration
  * @returns RAGQueryResult with context and sources for LLM
  */
 export async function ragQuery(
@@ -819,6 +843,8 @@ export async function ragQuery(
     minScore?: number;
     includeProducts?: boolean;
     includeDocuments?: boolean;
+    useReranking?: boolean;
+    rerankTopK?: number;
   } = {}
 ): Promise<RAGQueryResult> {
   const {
@@ -827,12 +853,15 @@ export async function ragQuery(
     minScore = 0.2,
     includeProducts = true,
     includeDocuments = true,
+    useReranking = true,
+    rerankTopK = 5,
   } = options;
 
   logger.info('RAG', 'RAG query', {
     query: query.substring(0, 100),
     productLimit,
     documentLimit,
+    useReranking,
   });
 
   try {
@@ -842,26 +871,38 @@ export async function ragQuery(
     // Search products if enabled
     if (includeProducts) {
       const productResult = await vectorSearch(query, {
-        limit: productLimit,
+        limit: productLimit * 2, // Get more candidates for reranking
         minScore,
       });
 
       if (productResult.results.length > 0) {
-        for (const product of productResult.results) {
+        // Convert to rerank candidates
+        const productCandidates: RerankCandidate[] = productResult.results.map((p) => ({
+          id: p.id,
+          content: `${p.name} - ${p.description || ''}`,
+          title: p.name,
+          score: p.similarity,
+          metadata: { type: 'product', price: p.price, category: p.category },
+        }));
+
+        // Rerank if enabled
+        const rerankedProducts = useReranking
+          ? await rerankCandidates(query, productCandidates, { topK: productLimit })
+          : productCandidates.slice(0, productLimit);
+
+        for (const product of rerankedProducts) {
           sources.push({
             type: 'product',
-            id: product.id,
-            title: product.name,
-            relevance: product.similarity,
-            content: product.description || undefined,
+            id: product.id as number,
+            title: product.title || 'Unknown',
+            relevance: product.rerankScore,
+            content: product.content,
           });
 
           contextParts.push(
-            `[Product] ${product.name}\n` +
-            `Description: ${product.description || 'N/A'}\n` +
-            `Price: $${product.price.toFixed(2)}\n` +
-            `Category: ${product.category || 'General'}\n` +
-            `Relevance: ${(product.similarity * 100).toFixed(1)}%`
+            `[Product] ${product.title}\n` +
+            `Description: ${product.content}\n` +
+            `Relevance: ${(product.rerankScore * 100).toFixed(1)}%`
           );
         }
       }
@@ -870,24 +911,38 @@ export async function ragQuery(
     // Search documents if enabled
     if (includeDocuments) {
       const documentResult = await documentSearch(query, {
-        limit: documentLimit,
+        limit: documentLimit * 2, // Get more candidates for reranking
         minScore,
       });
 
       if (documentResult.results.length > 0) {
-        for (const doc of documentResult.results) {
+        // Convert to rerank candidates
+        const documentCandidates: RerankCandidate[] = documentResult.results.map((d) => ({
+          id: d.id,
+          content: `${d.title}\n${d.content}`,
+          title: d.title,
+          score: d.similarity,
+          metadata: { type: 'document', docType: d.docType, category: d.category },
+        }));
+
+        // Rerank if enabled
+        const rerankedDocs = useReranking
+          ? await rerankCandidates(query, documentCandidates, { topK: documentLimit })
+          : documentCandidates.slice(0, documentLimit);
+
+        for (const doc of rerankedDocs) {
           sources.push({
             type: 'document',
             id: doc.id,
-            title: doc.title,
-            relevance: doc.similarity,
+            title: doc.title || 'Unknown',
+            relevance: doc.rerankScore,
             content: doc.content,
           });
 
           contextParts.push(
-            `[Document: ${doc.title}] (${doc.docType})\n` +
+            `[Document: ${doc.title}] (${doc.metadata?.docType || 'unknown'})\n` +
             `${doc.content}\n` +
-            `Relevance: ${(doc.similarity * 100).toFixed(1)}%`
+            `Relevance: ${(doc.rerankScore * 100).toFixed(1)}%`
           );
         }
       }

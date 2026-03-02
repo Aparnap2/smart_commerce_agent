@@ -693,6 +693,188 @@ async def run_mcp_specific_evaluation():
     return mcp_results
 
 
+# ============================================================================
+# RAGAS Integration
+# ============================================================================
+
+try:
+    from ragas import evaluate
+    from ragas.metrics import (
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
+        answer_similarity,
+        answer_correctness,
+    )
+    RAGAS_AVAILABLE = True
+except ImportError:
+    RAGAS_AVAILABLE = False
+    print("Warning: ragas not installed. Install with: pip install ragas")
+
+
+def evaluate_with_ragas(
+    questions: list[str],
+    answers: list[str],
+    contexts: list[list[str]],
+    ground_truths: list[str] | None = None
+) -> dict:
+    """
+    Evaluate RAG pipeline using RAGAS metrics.
+    
+    Args:
+        questions: List of user queries
+        answers: List of generated answers
+        contexts: List of retrieved contexts (each is a list of strings)
+        ground_truths: Optional list of expected answers
+    
+    Returns:
+        Dictionary with RAGAS scores
+    """
+    if not RAGAS_AVAILABLE:
+        return {"error": "RAGAS not available"}
+    
+    from datasets import Dataset
+    
+    # Prepare data for RAGAS
+    data = {
+        "question": questions,
+        "answer": answers,
+        "contexts": contexts,
+    }
+    
+    if ground_truths:
+        data["ground_truth"] = ground_truths
+    
+    # Create dataset
+    dataset = Dataset.from_dict(data)
+    
+    # Select metrics based on available ground truth
+    metrics = [
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
+    ]
+    
+    if ground_truths:
+        metrics.extend([answer_similarity, answer_correctness])
+    
+    # Run evaluation
+    print("\nRunning RAGAS evaluation...")
+    results = evaluate(dataset, metrics=metrics)
+    
+    # Convert to dict
+    scores = {
+        "faithfulness": results["faithfulness"],
+        "answer_relevancy": results["answer_relevancy"],
+        "context_precision": results["context_precision"],
+        "context_recall": results["context_recall"],
+    }
+    
+    if ground_truths:
+        scores["answer_similarity"] = results["answer_similarity"]
+        scores["answer_correctness"] = results["answer_correctness"]
+    
+    return scores
+
+
+async def run_ragas_evaluation() -> dict:
+    """Run RAGAS evaluation on sample data."""
+    print("\n" + "=" * 60)
+    print("RAGAS Evaluation Suite")
+    print("=" * 60)
+    
+    if not RAGAS_AVAILABLE:
+        print("RAGAS is not installed. Skipping RAGAS evaluation.")
+        return {"error": "RAGAS not installed"}
+    
+    # Sample evaluation data
+    test_data = [
+        {
+            "question": "What is the return policy?",
+            "answer": "You can return items within 30 days of purchase.",
+            "contexts": [["Return policy: 30-day return window for all products."]],
+            "ground_truth": "Items can be returned within 30 days.",
+        },
+        {
+            "question": "Do you have wireless headphones?",
+            "answer": "Yes, we have several wireless headphones including Sony WH-1000XM4 and Bose QC35.",
+            "contexts": [["Available headphones: Sony WH-1000XM4, Bose QC35, Apple AirPods."]],
+            "ground_truth": "We have Sony, Bose, and Apple wireless headphones.",
+        },
+    ]
+    
+    questions = [d["question"] for d in test_data]
+    answers = [d["answer"] for d in test_data]
+    contexts = [d["contexts"] for d in test_data]
+    ground_truths = [d["ground_truth"] for d in test_data]
+    
+    results = evaluate_with_ragas(questions, answers, contexts, ground_truths)
+    
+    print("\nRAGAS Scores:")
+    for metric, score in results.items():
+        if metric != "error":
+            print(f"  {metric}: {score:.3f}")
+    
+    return results
+
+
+# ============================================================================
+# Langfuse Integration for Scoring
+# ============================================================================
+
+def log_scores_to_langfuse(scores: dict, trace_id: str, run_name: str = "rag_evaluation"):
+    """
+    Log evaluation scores to Langfuse.
+    
+    Args:
+        scores: Dictionary of metric names to scores
+        trace_id: Langfuse trace ID
+        run_name: Name for this evaluation run
+    """
+    try:
+        from langfuse import Langfuse
+        
+        langfuse_public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+        langfuse_secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+        langfuse_host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
+        
+        if not langfuse_public_key or not langfuse_secret_key:
+            print("Langfuse not configured. Skipping score logging.")
+            return
+        
+        langfuse = Langfuse(
+            public_key=langfuse_public_key,
+            secret_key=langfuse_secret_key,
+            host=langfuse_host,
+        )
+        
+        # Create trace
+        trace = langfuse.trace(
+            id=trace_id,
+            name=run_name,
+            metadata={"evaluation_type": "ragas_llm_judge"},
+        )
+        
+        # Log each score
+        for metric_name, score_value in scores.items():
+            if isinstance(score_value, (int, float)) and not isinstance(score_value, bool):
+                trace.score(
+                    name=metric_name,
+                    value=score_value,
+                    comment=f"{metric_name} score from evaluation",
+                )
+        
+        langfuse.flush()
+        print(f"Scores logged to Langfuse trace: {trace_id}")
+        
+    except ImportError:
+        print("Langfuse not installed. Skipping score logging.")
+    except Exception as e:
+        print(f"Error logging to Langfuse: {e}")
+
+
 async def main():
     """Main entry point."""
     print("\nStarting LLM Evaluation Suite...")
@@ -711,6 +893,10 @@ async def main():
     # Run evaluations
     await run_comprehensive_evaluation()
     await run_mcp_specific_evaluation()
+    
+    # Run RAGAS evaluation if available
+    if RAGAS_AVAILABLE:
+        await run_ragas_evaluation()
 
     print("\n" + "=" * 60)
     print("Evaluation Complete!")
