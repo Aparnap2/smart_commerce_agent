@@ -2,11 +2,90 @@
 
 > This file is the source of truth for what's done, what's active, and what's next.
 > The coding agent MUST update this file after completing any task.
-> Last updated: 2026-02-21 - Phase 1 COMPLETE!
+> Last updated: 2026-03-03 - Phase 7 COMPLETE! 🎉
 
 ---
 
-## ✅ Phase 1: Foundation (Week 1) - COMPLETE! 🎉
+## ✅ Completed Phases
+
+### Phase 1-2: Monorepo Scaffold
+- [x] Turborepo + pnpm workspaces
+- [x] Shared packages: @smart-commerce/types, @smart-commerce/errors
+
+### Phase 3: commerce-api
+- [x] Hono + GraphQL Yoga + MCP server
+- [x] Prisma integration
+- [x] Commit: 161c325f
+
+### Phase 4: agent-core
+- [x] FastAPI + Python LangGraph
+- [x] classify + shopper + support agents
+- [x] Commit: 254d451b
+
+### Phase 5: Web Proxy Layer
+- [x] /api/agent route (SSE to agent-core)
+- [x] /api/copilotkit route
+- [x] Deleted lib/agents/ + lib/llm/ (moved to agent-core)
+
+### Phase 6: GenUI Components
+- [x] ProductGrid, CartDrawer, ActionConfirm, OrderTimeline
+- [x] Registered in chat.tsx with useCopilotAction
+- [x] 18 component tests passing
+
+### Phase 7: Docker + Makefile + Env
+- [x] docker-compose.yml (4 services: postgres, redis, commerce-api, agent-core)
+- [x] docker-compose.langfuse.yml (separate — optional)
+- [x] Updated Dockerfiles for monorepo build context
+- [x] .env.example with all required vars
+- [x] Makefile with memory-safe targets
+- [x] 9 docker-compose structure tests passing
+
+---
+
+## ⏳ Remaining Phases
+
+### Phase 8: E2E Verification
+- [ ] Full stack smoke test
+- [ ] Playwright E2E tests
+
+### Phase 9: Taste Vector
+- [ ] pgvector embeddings for recommendations
+
+### Phase 10: Stripe MCP Payment Flow
+- [ ] checkout-wizard GenUI component
+
+### Phase 11: Proactive Agent
+- [ ] cx-proactive.ts port + cron triggers
+
+### Phase 12: Rate Limiting + Circuit Breaker
+- [ ] Proxy route protections
+
+### Phase 13: Production Hardening
+- [ ] Secrets management
+- [ ] TLS
+- [ ] Health dashboards
+
+---
+
+## 🐛 Known Issues
+
+1. 88 pre-existing integration test failures (require running infrastructure)
+2. UCP module exists — should be deleted (replaced by Stripe MCP)
+3. RAG metrics in README showing old 44%/38%
+
+---
+
+## 📝 Architecture Decisions Log
+
+| Date | Decision | Reason |
+|------|----------|--------|
+| Feb 21 | Dropped UCP, using Stripe MCP | UCP is custom/unknown, Stripe MCP is real + official |
+| Feb 21 | Dropped Qdrant, pgvector only | Redundant infra, pgvector sufficient at portfolio scale |
+| Feb 21 | LangGraph active (not disabled) | Agent orchestration is the core of the project |
+| Feb 21 | Azure AI Foundry over Ollama | Production-ready, industry-standard |
+| Feb 21 | TDD enforced via CLAUDE.md | Stops hallucination, ensures quality |
+| Feb 21 | Real infra for all tests | No mocks for DB/Redis/LLM in integration tests |
+| Mar 03 | Monorepo with 3 apps | Clean separation: web, commerce-api, agent-core |
 **Goal**: Real working chat → DB → Azure AI Foundry pipeline
 
 ### Core Infrastructure

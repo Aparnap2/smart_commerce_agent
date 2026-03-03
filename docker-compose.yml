@@ -1,25 +1,20 @@
-# Smart Commerce Agent - Development Docker Compose
-#
-# This file is used for local development AND can be deployed to Azure Container Apps
-# using: az containerapp compose create --compose-file-path docker-compose.yml
-#
-# Architecture:
-# - Local: PostgreSQL + Redis + Langfuse (all Docker)
-# - Remote LLM: Azure AI Foundry (configured via .env.local)
-# - Same config works for dev AND prod deployment
+# Smart Commerce Agent — Docker Compose (Phase 7)
+# 4-core services: postgres, redis, commerce-api, agent-core
+# Langfuse moved to separate file (optional — high memory usage)
+
+version: '3.9'
 
 services:
-  # ============================================
-  # Core Infrastructure
-  # ============================================
 
-  # Primary Database with pgvector (PostgreSQL 16)
+  # ─────────────────────────────────────────────────────────
+  # Database (PostgreSQL 16 + pgvector)
+  # ─────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     container_name: smart-commerce-postgres
     environment:
-      POSTGRES_DB: smart_commerce
-      POSTGRES_USER: postgres
+      POSTGRES_DB:       smart_commerce
+      POSTGRES_USER:     postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
@@ -27,62 +22,108 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_commerce"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test:     ["CMD-SHELL", "pg_isready -U postgres -d smart_commerce"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+    restart: unless-stopped
 
-  # ============================================
-  # State & Checkpointing
-  # ============================================
-
-  # Redis for LangGraph checkpointing + RAG cache
+  # ─────────────────────────────────────────────────────────
+  # Cache & Checkpoints (Redis)
+  # ─────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: smart-commerce-redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout:  3s
+      retries:  5
+    restart: unless-stopped
 
-  # ============================================
-  # Observability (Self-hosted Langfuse)
-  # ============================================
-
-  langfuse:
-    image: langfuse/langfuse:latest
-    container_name: smart-commerce-langfuse
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/langfuse
-      - NEXTAUTH_SECRET=dev-secret-change-in-prod
-      - NEXTAUTH_URL=http://localhost:3001
-      - TELEMETRY_ENABLED=false
+  # ─────────────────────────────────────────────────────────
+  # Commerce API (Node.js + Hono + GraphQL + MCP)
+  # ─────────────────────────────────────────────────────────
+  commerce-api:
+    build:
+      context:    .
+      dockerfile: apps/commerce-api/Dockerfile
+    container_name: smart-commerce-commerce-api
     ports:
-      - "3001:3000"
+      - "3001:3001"
+    environment:
+      DATABASE_URL:       postgresql://postgres:postgres@postgres:5432/smart_commerce
+      REDIS_URL:          redis://redis:6379
+      JWT_SECRET:         ${JWT_SECRET}
+      OPENAI_API_KEY:     ${OPENAI_API_KEY}
+      OPENAI_BASE_URL:    ${OPENAI_BASE_URL}
+      OPENAI_MODEL:       ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-2024-10-21}
+      EMBEDDING_MODEL:    ${EMBEDDING_MODEL:-text-embedding-3-small}
+      NODE_ENV:           production
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - langfuse_data:/var/lib/langfuse
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:     ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
-# ============================================
-# Volumes
-# ============================================
+  # ─────────────────────────────────────────────────────────
+  # Agent Core (Python + FastAPI + LangGraph)
+  # ─────────────────────────────────────────────────────────
+  agent-core:
+    build:
+      context:    .
+      dockerfile: apps/agent-core/Dockerfile
+    container_name: smart-commerce-agent-core
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL:       postgresql://postgres:postgres@postgres:5432/smart_commerce
+      REDIS_URL:          redis://redis:6379
+      COMMERCE_API_URL:   http://commerce-api:3001
+      JWT_SECRET:         ${JWT_SECRET}
+      OPENAI_API_KEY:     ${OPENAI_API_KEY}
+      OPENAI_BASE_URL:    ${OPENAI_BASE_URL}
+      OPENAI_MODEL:       ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-2024-10-21}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      commerce-api:
+        condition: service_healthy
+    healthcheck:
+      test:     ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 25s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
 volumes:
   postgres_data:
-  redis_data:
-  langfuse_data:
-
-# ============================================
-# External Services (configured via .env.local)
-# ============================================
-# - Azure AI Foundry: LLM endpoint (remote)
-#   Configure in .env.local: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY
-# - Ollama (optional fallback): localhost:11434
-#   docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+    external: true
+    name: smart-commerce_postgres_data
