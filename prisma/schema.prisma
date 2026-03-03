@@ -54,8 +54,8 @@ model Product {
   // Populated via trigger on insert/update
   searchVector Unsupported("tsvector")? @map("search_vector")
 
-  // Semantic embedding for vector similarity (384-dim for sentence-transformers)
-  embedding    Unsupported("vector(384)")? @map("embedding")
+  // Semantic embedding for vector similarity (1536-dim for text-embedding-3-small)
+  embedding    Unsupported("vector(1536)")? @map("embedding")
 
   orders       Order[]
   embeddings   ProductEmbedding[]

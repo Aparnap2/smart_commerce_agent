@@ -1,263 +1,79 @@
 /**
- * LLM Provider Abstraction Layer
- *
- * Provides unified interface for LLM calls with production fallback:
- * - Primary: OpenAI API (production/serverless)
- * - Fallback: Ollama (local development)
- *
- * @packageDocumentation
+ * LLM Provider - Azure AI Foundry ONLY
+ * 
+ * NO Ollama, NO Google, NO OpenAI direct.
+ * Azure AI Foundry is the sole LLM provider.
  */
 
-import { env } from '@/lib/env';
+import { AzureChatOpenAI } from '@langchain/openai';
+import { createCircuitBreaker } from '../resilience/circuit-breaker';
 
-/**
- * LLM Provider type
- */
-export type LLMProvider = 'openai' | 'ollama';
+const DEGRADED_RESPONSE = {
+  content: 'Service temporarily unavailable. Please try again.',
+  degraded: true,
+};
 
-/**
- * Chat message format
- */
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-/**
- * Chat completion request
- */
-export interface ChatCompletionRequest {
-  model?: string;
-  messages: ChatMessage[];
-  temperature?: number;
-  maxTokens?: number;
-  format?: 'json_object' | 'text';
-}
-
-/**
- * Chat completion response
- */
-export interface ChatCompletionResponse {
-  content: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
-
-/**
- * LLM Provider Configuration
- */
-interface LLMConfig {
-  provider: LLMProvider;
-  baseUrl: string;
-  apiKey?: string;
-  model: string;
-  defaultTemperature: number;
-}
-
-/**
- * Get LLM configuration from environment
- */
-function getLLMConfig(): LLMConfig {
-  // Check for OpenAI first (production)
-  if (env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: env.OPENAI_API_KEY,
-      model: env.OPENAI_MODEL || 'gpt-4o-mini',
-      defaultTemperature: 0.7,
-    };
+async function createAzureLLMAsync() {
+  if (!process.env.AZURE_OPENAI_BASE_URL) {
+    throw new Error('AZURE_OPENAI_BASE_URL is required. Check .env.local');
   }
 
-  // Fallback to Ollama (local development)
-  return {
-    provider: 'ollama',
-    baseUrl: env.OLLAMA_BASE_URL || 'http://localhost:11434',
-    model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
-    defaultTemperature: 0.7,
-  };
-}
-
-/**
- * Check if LLM service is available
- */
-export async function checkLLMAvailability(): Promise<{
-  available: boolean;
-  provider: LLMProvider;
-  latency: number;
-}> {
-  const config = getLLMConfig();
-  const start = Date.now();
-
-  try {
-    const url = config.provider === 'openai'
-      ? `${config.baseUrl}/models`
-      : `${config.baseUrl}/api/tags`;
-
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-
-    if (config.provider === 'openai' && config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-    }
-
-    const response = await fetch(url, { method: 'GET', headers });
-
-    return {
-      available: response.ok,
-      provider: config.provider,
-      latency: Date.now() - start,
-    };
-  } catch {
-    return {
-      available: false,
-      provider: config.provider,
-      latency: Date.now() - start,
-    };
-  }
-}
-
-/**
- * Create chat completion using configured LLM provider
- */
-export async function createChatCompletion(
-  request: ChatCompletionRequest
-): Promise<ChatCompletionResponse> {
-  const config = getLLMConfig();
-  const model = request.model || config.model;
-  const temperature = request.temperature ?? config.defaultTemperature;
-
-  const payload = config.provider === 'openai'
-    ? createOpenAIPayload(model, request, temperature)
-    : createOllamaPayload(model, request, temperature);
-
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (config.provider === 'openai' && config.apiKey) {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-  }
-
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
+  return new AzureChatOpenAI({
+    azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
+    azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
+    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
+    azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
+    temperature: 0.2,
+    maxRetries: 2,
   });
+}
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`LLM API error (${config.provider}): ${error}`);
+function createAzureLLM() {
+  if (!process.env.AZURE_OPENAI_BASE_URL) {
+    throw new Error('AZURE_OPENAI_BASE_URL is required. Check .env.local');
   }
 
-  const data = await response.json();
+  return new AzureChatOpenAI({
+    azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
+    azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
+    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
+    azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
+    temperature: 0.2,
+    maxRetries: 2,
+  });
+}
 
-  if (config.provider === 'openai') {
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      usage: data.usage,
-    };
-  }
+// Circuit-breaker wrapped export
+export const llm = createCircuitBreaker(createAzureLLMAsync, {
+  timeout: 3000,
+  errorThresholdPercentage: 50,
+  resetTimeout: 30000,
+});
 
-  // Ollama response format
-  return {
-    content: data.message?.content || data.choices?.[0]?.message?.content || '',
-  };
+export function getLLM() {
+  return createAzureLLM();
 }
 
 /**
- * Create OpenAI-compatible payload
- */
-function createOpenAIPayload(
-  model: string,
-  request: ChatCompletionRequest,
-  temperature: number
-) {
-  return {
-    model,
-    messages: request.messages,
-    temperature,
-    max_tokens: request.maxTokens,
-    response_format: request.format === 'json_object'
-      ? { type: 'json_object' }
-      : undefined,
-  };
-}
-
-/**
- * Create Ollama-compatible payload
- */
-function createOllamaPayload(
-  model: string,
-  request: ChatCompletionRequest,
-  temperature: number
-) {
-  return {
-    model,
-    messages: request.messages,
-    temperature,
-    // Ollama expects "json" string for JSON mode, not object
-    format: request.format === 'json_object' ? 'json' : undefined,
-  };
-}
-
-/**
- * Generate embeddings for text
+ * Generate embeddings using Azure text-embedding-3-small
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const config = getLLMConfig();
-
-  if (config.provider === 'openai') {
-    const response = await fetch(`${config.baseUrl}/embeddings`, {
+  const response = await fetch(
+    `${process.env.AZURE_OPENAI_BASE_URL}/openai/deployments/${process.env.AZURE_EMBEDDING_DEPLOYMENT}/embeddings?api-version=${process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21'}`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
+        'api-key': process.env.AZURE_OPENAI_API_KEY!,
       },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate embedding');
+      body: JSON.stringify({ input: text }),
     }
-
-    const data = await response.json();
-    return data.data?.[0]?.embedding || [];
-  }
-
-  // Ollama embedding
-  const response = await fetch(`${config.baseUrl}/api/embeddings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: env.EMBEDDING_MODEL || 'nomic-embed-text',
-      prompt: text,
-    }),
-  });
+  );
 
   if (!response.ok) {
-    throw new Error('Failed to generate embedding');
+    throw new Error(`Embedding API error: ${response.statusText}`);
   }
 
   const data = await response.json();
-  return data.embedding || [];
-}
-
-/**
- * Get provider info for logging
- */
-export function getLLMProviderInfo(): { provider: LLMProvider; model: string; baseUrl: string } {
-  const config = getLLMConfig();
-  return {
-    provider: config.provider,
-    model: config.model,
-    baseUrl: config.baseUrl,
-  };
+  return data.data?.[0]?.embedding || [];
 }

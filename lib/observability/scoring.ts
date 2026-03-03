@@ -99,22 +99,28 @@ Respond with a JSON object:
 }`;
 
   try {
-    const response_1 = await fetch(`${env.OLLAMA_BASE_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert AI response evaluator. Always respond with valid JSON.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.1,
-        format: { type: 'json_object' },
-      }),
-    });
+    // Use Azure AI Foundry for scoring
+    const response_1 = await fetch(
+      `${env.AZURE_OPENAI_BASE_URL}/openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': env.AZURE_OPENAI_API_KEY,
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert AI response evaluator. Always respond with valid JSON.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        }),
+      }
+    );
 
     if (!response_1.ok) {
       throw new Error('LLM evaluation failed');
@@ -145,7 +151,7 @@ Respond with a JSON object:
         helpfulness: scores.helpfulness ?? 0.7,
       },
       feedback: parsed.feedback || ['Response evaluated successfully'],
-      evaluationModel: env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
+      evaluationModel: env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o-mini',
       evaluationLatencyMs,
     };
   } catch (error) {
