@@ -43,7 +43,7 @@ Production-grade agentic e-commerce CX platform. A 3-service monorepo with Next.
 | Frontend | Next.js 15, shadcn/ui, CopilotKit |
 | Commerce API | Hono + Bun, GraphQL Yoga, Prisma JS |
 | Agent Core | FastAPI + Python, LangGraph, Azure OpenAI |
-| LLM | Azure AI Foundry (gpt-4o-mini) |
+| LLM | Azure AI Foundry (gpt-oss-120b) |
 | DB | PostgreSQL 16 + pgvector |
 | Cache | Redis 7 |
 | Observability | Langfuse |

@@ -151,7 +151,7 @@ Respond with a JSON object:
         helpfulness: scores.helpfulness ?? 0.7,
       },
       feedback: parsed.feedback || ['Response evaluated successfully'],
-      evaluationModel: env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o-mini',
+      evaluationModel: env.AZURE_OPENAI_DEPLOYMENT || 'gpt-oss-120b',
       evaluationLatencyMs,
     };
   } catch (error) {

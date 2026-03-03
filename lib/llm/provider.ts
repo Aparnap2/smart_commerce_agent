@@ -21,7 +21,7 @@ async function createAzureLLMAsync() {
   return new AzureChatOpenAI({
     azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
     azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
+    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-oss-120b',
     azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
     temperature: 0.2,
     maxRetries: 2,
@@ -36,7 +36,7 @@ function createAzureLLM() {
   return new AzureChatOpenAI({
     azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
     azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
+    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-oss-120b',
     azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
     temperature: 0.2,
     maxRetries: 2,
