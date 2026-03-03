@@ -249,3 +249,17 @@ model User {
 
   @@map("users")
 }
+
+/// Agent notification for price alerts, status updates, etc.
+model AgentNotification {
+  id         String    @id @default(cuid())
+  customerId String    @map("customer_id")
+  type       String
+  payload    String
+  read       Boolean   @default(false)
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([customerId, read])
+  @@map("agent_notifications")
+}

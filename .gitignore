@@ -3,6 +3,12 @@
 # dependencies
 /node_modules
 **/node_modules
+
+# Python
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
 /.pnp
 .pnp.*
 .yarn/*
