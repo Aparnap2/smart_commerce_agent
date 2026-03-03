@@ -230,14 +230,21 @@ model DocumentChunk {
   @@index([documentId])
   @@map("document_chunks")
 }
+enum Role {
+  SHOPPER
+  MERCHANT
+  SUPPORT
+  ADMIN
+}
+
 model User {
-  id        String   @id @default(uuid())
-  name      String?
-  email     String   @unique
-  password  String
-  role      String   @default("user")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(SHOPPER)
+  name         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("users")
 }

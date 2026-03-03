@@ -68,12 +68,6 @@ importers:
       '@prisma/client':
         specifier: 6.7.0
         version: 6.7.0(prisma@6.7.0(typescript@5.8.3))(typescript@5.8.3)
-      '@supabase/ssr':
-        specifier: ^0.8.0
-        version: 0.8.0(@supabase/supabase-js@2.94.1)
-      '@supabase/supabase-js':
-        specifier: ^2.94.1
-        version: 2.94.1
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.1.0)
@@ -98,6 +92,9 @@ importers:
       ioredis:
         specifier: ^5.9.1
         version: 5.9.1
+      jose:
+        specifier: ^6.1.3
+        version: 6.1.3
       langchain:
         specifier: ^1.2.28
         version: 1.2.28(@langchain/core@1.1.29(@opentelemetry/api@1.9.0)(openai@4.97.0(ws@8.19.0)(zod@4.3.6)))(@opentelemetry/api@1.9.0)(openai@4.97.0(ws@8.19.0)(zod@4.3.6))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod-to-json-schema@3.25.1(zod@4.3.6))
@@ -3158,11 +3155,6 @@ packages:
     resolution: {integrity: sha512-Wq8olpCAGmN4y2DH2kUdlcakdzNHRCde72BFS8zK5ub46bBeSUoE9DqrfeNFWKaF2gCE/cmK8aTUTorZD9jdtQ==}
     engines: {node: '>=20.0.0'}
 
-  '@supabase/ssr@0.8.0':
-    resolution: {integrity: sha512-/PKk8kNFSs8QvvJ2vOww1mF5/c5W8y42duYtXvkOSe+yZKRgTTZywYG2l41pjhNomqESZCpZtXuWmYjFRMV+dw==}
-    peerDependencies:
-      '@supabase/supabase-js': ^2.76.1
-
   '@supabase/storage-js@2.94.1':
     resolution: {integrity: sha512-/Mi18LGyrugPwtfqETfAqEGcBQotY/7IMsTGYgEFdqr8cQq280BVQWjN2wI9KibWtshPp0Ryvil5Uzd5YfM7kA==}
     engines: {node: '>=20.0.0'}
@@ -4469,10 +4461,6 @@ packages:
   cookie@0.7.2:
     resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
     engines: {node: '>= 0.6'}
-
-  cookie@1.1.1:
-    resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
-    engines: {node: '>=18'}
 
   core-js-compat@3.48.0:
     resolution: {integrity: sha512-OM4cAF3D6VtH/WkLtWvyNC56EZVXsZdU3iqaMG2B4WvYrlqU831pc4UtG5yp0sE9z8Y02wVN7PjW5Zf9Gt0f1Q==}
@@ -12038,14 +12026,17 @@ snapshots:
   '@supabase/auth-js@2.94.1':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@supabase/functions-js@2.94.1':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@supabase/postgrest-js@2.94.1':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@supabase/realtime-js@2.94.1':
     dependencies:
@@ -12056,16 +12047,13 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
-
-  '@supabase/ssr@0.8.0(@supabase/supabase-js@2.94.1)':
-    dependencies:
-      '@supabase/supabase-js': 2.94.1
-      cookie: 1.1.1
+    optional: true
 
   '@supabase/storage-js@2.94.1':
     dependencies:
       iceberg-js: 0.8.1
       tslib: 2.8.1
+    optional: true
 
   '@supabase/supabase-js@2.94.1':
     dependencies:
@@ -12077,6 +12065,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@swc/counter@0.1.3': {}
 
@@ -12454,7 +12443,8 @@ snapshots:
       pg-protocol: 1.9.5
       pg-types: 4.0.2
 
-  '@types/phoenix@1.6.7': {}
+  '@types/phoenix@1.6.7':
+    optional: true
 
   '@types/prop-types@15.7.15': {}
 
@@ -12496,6 +12486,7 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 22.15.3
+    optional: true
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -13451,8 +13442,6 @@ snapshots:
   cookie-signature@1.2.2: {}
 
   cookie@0.7.2: {}
-
-  cookie@1.1.1: {}
 
   core-js-compat@3.48.0:
     dependencies:
@@ -14941,7 +14930,8 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
-  iceberg-js@0.8.1: {}
+  iceberg-js@0.8.1:
+    optional: true
 
   iconv-lite@0.4.24:
     dependencies:
@@ -18954,7 +18944,8 @@ snapshots:
       imurmurhash: 0.1.4
       signal-exit: 4.1.0
 
-  ws@8.19.0: {}
+  ws@8.19.0:
+    optional: true
 
   xml-name-validator@5.0.0: {}
 
