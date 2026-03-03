@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Configuration
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 SUPABASE_URL="${SUPABASE_URL:-http://localhost:8000}"
-MOCKOON_URL="${MOCKOON_URL:-http://localhost:3000}"
+MOCKOON_URL="${MOCKOON_URL:-http://localhost:3001}"
 NEXTJS_URL="${NEXTJS_URL:-http://localhost:3000}"
 API_URL="${API_URL:-http://localhost:3000/api}"
 
@@ -90,7 +90,7 @@ check_ollama() {
             "prompt":"Say exactly: Hello from Ollama!",
             "stream":false,
             "options":{"temperature":0}
-        }')
+        }' || true)
 
     if echo "$RESPONSE" | grep -q "Hello from Ollama!"; then
         log_success "LLM generation working correctly"
@@ -103,7 +103,7 @@ check_ollama() {
     log_info "Testing embedding generation..."
     EMBEDDING=$(curl -s -X POST "$OLLAMA_URL/api/embed" \
         -H "Content-Type: application/json" \
-        -d '{"model":"nomic-embed-text","prompt":"test embedding"}')
+        -d '{"model":"nomic-embed-text","prompt":"test embedding"}' || true)
 
     if echo "$EMBEDDING" | grep -q '"embedding"'; then
         log_success "Embedding generation working"
@@ -138,7 +138,7 @@ check_supabase() {
     log_info "Testing authenticated request..."
     RESPONSE=$(curl -s "$SUPABASE_URL/rest/v1/organizations?select=count" \
         -H "apikey: $SUPABASE_ANON_KEY" \
-        -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+        -H "Authorization: Bearer $SUPABASE_ANON_KEY" || true)
 
     if echo "$RESPONSE" | grep -qE '^\[|\{"count"'; then
         log_success "Supabase authenticated request successful"
@@ -272,7 +272,9 @@ main() {
 
     # Load environment variables
     if [ -f .env.test.docker ]; then
-        export $(cat .env.test.docker | grep -v '^#' | xargs)
+        set -a
+        . .env.test.docker
+        set +a
     fi
 
     # Run all checks

@@ -29,7 +29,8 @@ const authRoutes = ['/auth/login', '/auth/signup', '/auth/forgot-password'];
  * Create a Supabase client with cookie handling for middleware
  */
 function createMiddlewareClient(
-  request: NextRequest
+  request: NextRequest,
+  response: NextResponse
 ): SupabaseClient {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,10 +41,19 @@ function createMiddlewareClient(
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: { path?: string; domain?: string; sameSite?: 'lax' | 'strict' | 'none'; secure?: boolean; httpOnly?: boolean; maxAge?: number }) {
-          // The response will be mutated, so we can't set cookies here in middleware
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          });
         },
         remove(name: string, options: { path?: string; domain?: string }) {
-          // The response will be mutated, so we can't remove cookies here in middleware
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+            maxAge: 0,
+          });
         },
       },
     }
@@ -71,8 +81,8 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const response = NextResponse.next();
 
-  // Create Supabase client
-  const supabase = createMiddlewareClient(request);
+  // Create Supabase client with response for cookie handling
+  const supabase = createMiddlewareClient(request, response);
 
   // Get current session
   const {
@@ -123,21 +133,9 @@ export async function middleware(request: NextRequest) {
 // ============================================================================
 
 export const config = {
-  // Match all routes except:
-  // - API routes (except protected ones)
-  // - _next/static (static files)
-  // - _next/image (image optimization files)
-  // - favicon.ico (favicon)
-  // - public folder files
+  // Match protected routes explicitly, then all non-static paths excluding other /api routes
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (except api/protected/*)
-     * - _next/static
-     * - _next/image
-     * - favicon.ico
-     * - public files (public/*)
-     */
-    '/((?!api/protected|_next/static|_next/image|favicon.ico|public).*)',
+    '/api/protected/:path*',
+    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
   ],
 };

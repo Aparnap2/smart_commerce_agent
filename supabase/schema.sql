@@ -1,8 +1,9 @@
 -- Multi-tenant Customer Support Intelligence System Schema
 -- PostgreSQL with Row Level Security (RLS) for tenant isolation
 
--- Enable UUID extension
+-- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgvector";
 
 -- =====================================================
 -- ENUMS
@@ -513,13 +514,16 @@ CREATE TRIGGER set_kb_articles_timestamp
     BEFORE UPDATE ON knowledge_articles
     FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 
+-- Sequence for unique ticket numbers (monotonic, no collisions)
+CREATE SEQUENCE IF NOT EXISTS ticket_number_seq START 1;
+
 -- Function to generate ticket number
 CREATE OR REPLACE FUNCTION generate_ticket_number()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.ticket_number IS NULL THEN
         NEW.ticket_number := 'TKT-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' ||
-            LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
+            LPAD(nextval('ticket_number_seq')::TEXT, 6, '0');
     END IF;
     RETURN NEW;
 END;

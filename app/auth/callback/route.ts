@@ -16,7 +16,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/dashboard';
+  let next = searchParams.get('next') ?? '/dashboard';
+
+  // Validate next parameter to prevent open redirects
+  // Must be a relative path starting with '/' but not '//' and contain no scheme
+  if (!next.startsWith('/') || next.startsWith('//') || next.includes('://') || next.includes('@')) {
+    next = '/dashboard';
+  }
 
   // If there's no code, redirect to login with error
   if (!code) {
@@ -59,6 +65,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Successful authentication - redirect to dashboard or specified next page
-  return NextResponse.redirect(`${origin}${next}`);
+  // Build safe URL using origin + validated relative path
+  const redirectUrl = new URL(next, origin);
+  return NextResponse.redirect(redirectUrl.toString());
 }

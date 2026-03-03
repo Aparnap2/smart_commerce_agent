@@ -573,7 +573,7 @@ VALUES
         't0000004-0000-0000-0000-000000000004',
         'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         'u0000003-0000-0000-0000-000000000003',
-        'supervisor',
+        'agent',
         '[INTERNAL] Customer is within 30-day refund window (purchased Nov 5). Enterprise policy allows full refund with documentation of decision. Need Mike to review and approve.',
         '<p><strong>[INTERNAL]</strong> Customer is within 30-day refund window (purchased Nov 5). Enterprise policy allows full refund with documentation of decision. Need Mike to review and approve.</p>',
         TRUE,

@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ORGANIZATIONS (Multi-tenancy root)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS organizations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(100) UNIQUE NOT NULL,
     domain VARCHAR(255),
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 -- USERS (Agents, admins, supervisors)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255),
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- CUSTOMERS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(50),
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS customers (
 -- PRODUCTS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS products (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     sku VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS products (
 -- ORDERS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS orders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE SET NULL,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS orders (
 -- REFUNDS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS refunds (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'processed', 'failed')),
     processed_by UUID REFERENCES users(id),
     notes TEXT,
-    metadata JSONB DEFAULT '{}(),
+    metadata JSONB DEFAULT '{}',
     requested_at TIMESTAMPTZ DEFAULT NOW(),
     processed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS refunds (
 -- TICKETS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS tickets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 -- MESSAGES (Conversation in tickets)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
     sender_type VARCHAR(20) NOT NULL CHECK (sender_type IN ('customer', 'agent', 'system', 'bot')),
     sender_id UUID NOT NULL,
@@ -173,10 +173,23 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- =====================================================
+-- COUNTERS (Atomic sequences for multi-tenant entities)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS ticket_counters (
+    organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    counter BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS order_counters (
+    organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    counter BIGINT NOT NULL DEFAULT 0
+);
+
+-- =====================================================
 -- KNOWLEDGE ARTICLES
 -- =====================================================
 CREATE TABLE IF NOT EXISTS knowledge_articles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     author_id UUID REFERENCES users(id) ON DELETE SET NULL,
     title VARCHAR(500) NOT NULL,
@@ -200,7 +213,7 @@ CREATE TABLE IF NOT EXISTS knowledge_articles (
 -- AUDIT LOGS (Track all changes for compliance)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
@@ -300,15 +313,30 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE knowledge_articles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Organizations: Users can only see their own organization
+-- Organizations: Users can only see and modify their own organization
 CREATE POLICY "organizations_select_policy" ON organizations
-    FOR SELECT USING (true);
+    FOR SELECT USING (
+        id IN (
+            SELECT organization_id FROM users 
+            WHERE id = current_setting('app.current_user_id', true)::UUID
+        )
+    );
 
 CREATE POLICY "organizations_insert_policy" ON organizations
-    FOR INSERT WITH CHECK (true);
+    FOR INSERT WITH CHECK (
+        id IN (
+            SELECT organization_id FROM users 
+            WHERE id = current_setting('app.current_user_id', true)::UUID
+        )
+    );
 
 CREATE POLICY "organizations_update_policy" ON organizations
-    FOR UPDATE USING (true);
+    FOR UPDATE USING (
+        id IN (
+            SELECT organization_id FROM users 
+            WHERE id = current_setting('app.current_user_id', true)::UUID
+        )
+    );
 
 -- Users: Users can only access users in their organization
 CREATE POLICY "users_select_policy" ON users
@@ -495,23 +523,49 @@ CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON tickets
 CREATE TRIGGER update_knowledge_updated_at BEFORE UPDATE ON knowledge_articles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Generate ticket number function
+-- Generate ticket number function (atomic)
 CREATE OR REPLACE FUNCTION generate_ticket_number(organization_id UUID)
 RETURNS VARCHAR(50) AS $$
+DECLARE
+    next_val BIGINT;
+    org_mod TEXT;
+    year_part TEXT;
+    month_part TEXT;
 BEGIN
-    RETURN 'TKT-' || organization_id::TEXT::BIGINT % 1000000 || '-' || EXTRACT(YEAR FROM NOW()) ||
-           LPAD(EXTRACT(MONTH FROM NOW())::TEXT, 2, '0') ||
-           LPAD((SELECT COUNT(*) + 1 FROM tickets WHERE organization_id = generate_ticket_number.organization_id)::TEXT, 6, '0');
+    -- Atomically increment the counter for this organization
+    INSERT INTO ticket_counters (organization_id, counter) 
+    VALUES (organization_id, 1)
+    ON CONFLICT (organization_id) 
+    DO UPDATE SET counter = ticket_counters.counter + 1
+    RETURNING counter INTO next_val;
+
+    -- Build the ticket number components
+    org_mod := LPAD((organization_id::TEXT::BIGINT % 1000000)::TEXT, 6, '0');
+    year_part := EXTRACT(YEAR FROM NOW())::TEXT;
+    month_part := LPAD(EXTRACT(MONTH FROM NOW())::TEXT, 2, '0');
+
+    -- Format: TKT-{org_mod}-{year}{month}{counter:6d}
+    RETURN 'TKT-' || org_mod || '-' || year_part || month_part || LPAD(next_val::TEXT, 6, '0');
 END;
 $$ LANGUAGE plpgsql;
 
--- Generate order number function
+-- Generate order number function (atomic)
 CREATE OR REPLACE FUNCTION generate_order_number(organization_id UUID)
 RETURNS VARCHAR(50) AS $$
+DECLARE
+    next_val BIGINT;
 BEGIN
-    RETURN 'ORD-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' ||
-           LPAD((SELECT COUNT(*) + 1 FROM orders WHERE organization_id = generate_order_number.organization_id)::TEXT, 6, '0');
+    -- Atomically increment the counter for this organization
+    INSERT INTO order_counters (organization_id, counter) 
+    VALUES (organization_id, 1)
+    ON CONFLICT (organization_id) 
+    DO UPDATE SET counter = order_counters.counter + 1
+    RETURNING counter INTO next_val;
+
+    -- Format: ORD-{YYYYMMDD}-{counter:6d}
+    RETURN 'ORD-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(next_val::TEXT, 6, '0');
 END;
+$$ LANGUAGE plpgsql;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================

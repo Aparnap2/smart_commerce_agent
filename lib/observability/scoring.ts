@@ -125,13 +125,13 @@ Respond with a JSON object:
     const parsed = JSON.parse(content);
 
     const scores = parsed.scores || {};
-    const overallScore = (
-      (scores.relevance || 0.7) +
-      (scores.accuracy || 0.7) +
-      (scores.completeness || 0.7) +
-      (scores.coherence || 0.7) +
-      (scores.helpfulness || 0.7)
-    ) / 5;
+     const overallScore = (
+       (scores.relevance ?? 0.7) +
+       (scores.accuracy ?? 0.7) +
+       (scores.completeness ?? 0.7) +
+       (scores.coherence ?? 0.7) +
+       (scores.helpfulness ?? 0.7)
+     ) / 5;
 
     const evaluationLatencyMs = Date.now() - startTime;
 

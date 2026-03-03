@@ -232,8 +232,21 @@ export async function orderLookup(input: OrderLookupInput): Promise<{
 
   try {
     const db = getDb();
+    
+    // Build dynamic filter based on provided inputs
+    const where: any = {};
+    if (input.email) {
+      where.customer_email = input.email;
+    }
+    if (input.orderId) {
+      where.id = input.orderId;
+    }
+    if (input.status) {
+      where.status = input.status;
+    }
+    
     const orders = await db.orders.findMany({
-      where: input.email ? { customer_email: input.email } : {},
+      where,
       take: input.limit,
     });
 
@@ -274,6 +287,23 @@ export async function refundRequest(input: RefundRequestInput): Promise<{
 
   try {
     const db = getDb();
+
+    // Check for existing refund by idempotency key to prevent duplicates
+    if (input.idempotencyKey) {
+      const existingRefund = await db.refunds.findUnique({
+        where: { idempotency_key: input.idempotencyKey },
+      }) as any;
+      if (existingRefund) {
+        const result: RefundResult = {
+          success: true,
+          refundId: existingRefund.id,
+          status: existingRefund.status,
+          amount: existingRefund.amount,
+          message: 'Refund already processed with this idempotency key',
+        };
+        return { success: true, result };
+      }
+    }
 
     // Generate refund number
     const refundNumber = `REF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;

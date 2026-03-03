@@ -91,14 +91,19 @@ const handler = (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
-        const { email } = JSON.parse(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          access_token: jwt(),
-          refresh_token: uuid(),
-          user: { id: uuid(), email: email || 'test@example.com', role: 'customer' },
-          session_id: uuid()
-        }));
+        try {
+          const { email } = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            access_token: jwt(),
+            refresh_token: uuid(),
+            user: { id: uuid(), email: email || 'test@example.com', role: 'customer' },
+            session_id: uuid()
+          }));
+        } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }
@@ -167,18 +172,23 @@ const handler = (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
-        const data = JSON.parse(body);
-        const newTicket = {
-          id: uuid(),
-          ticket_number: `TKT-${Date.now()}`,
-          subject: data.subject || 'New Ticket',
-          status: 'open',
-          message: 'Ticket created successfully',
-          created_at: new Date().toISOString()
-        };
-        mockData.tickets.push(newTicket);
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(newTicket));
+        try {
+          const data = JSON.parse(body);
+          const newTicket = {
+            id: uuid(),
+            ticket_number: `TKT-${Date.now()}`,
+            subject: data.subject || 'New Ticket',
+            status: 'open',
+            message: 'Ticket created successfully',
+            created_at: new Date().toISOString()
+          };
+          mockData.tickets.push(newTicket);
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(newTicket));
+        } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }
@@ -188,10 +198,15 @@ const handler = (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
-        const data = JSON.parse(body);
-        const id = path.split('/').pop();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id, status: data.status || 'pending', updated_at: new Date().toISOString() }));
+        try {
+          const data = JSON.parse(body);
+          const id = path.split('/').pop();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id, status: data.status || 'pending', updated_at: new Date().toISOString() }));
+        } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }
@@ -201,16 +216,21 @@ const handler = (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
-        const data = JSON.parse(body);
-        const ticketId = path.split('/')[3];
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          id: uuid(),
-          ticket_id: ticketId,
-          content: data.content || '',
-          author_type: 'customer',
-          created_at: new Date().toISOString()
-        }));
+        try {
+          const data = JSON.parse(body);
+          const ticketId = path.split('/')[3];
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            id: uuid(),
+            ticket_id: ticketId,
+            content: data.content || '',
+            author_type: 'customer',
+            created_at: new Date().toISOString()
+          }));
+        } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }
@@ -262,9 +282,14 @@ const handler = (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
-        const data = JSON.parse(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ received: true, type: data.type || 'unknown', message: 'Webhook received' }));
+        try {
+          const data = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ received: true, type: data.type || 'unknown', message: 'Webhook received' }));
+        } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }
