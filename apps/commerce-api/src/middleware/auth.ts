@@ -2,13 +2,18 @@ import { createMiddleware } from 'hono/factory';
 import { jwtVerify } from 'jose';
 import { getCookie } from 'hono/cookie';
 
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
+const SECRET = process.env.JWT_SECRET 
+  ? new TextEncoder().encode(process.env.JWT_SECRET)
+  : null;
 
 export const authMiddleware = createMiddleware(async (c, next) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '') ?? getCookie(c, 'token');
   
-  if (!token) {
-    return c.json({ error: 'Unauthorized' }, 401);
+  if (!token || !SECRET) {
+    // Allow unauthenticated requests - resolvers will handle auth
+    c.set('userId', null);
+    await next();
+    return;
   }
   
   try {
@@ -17,6 +22,8 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     c.set('role', payload.role as string);
     await next();
   } catch {
-    return c.json({ error: 'Invalid token' }, 401);
+    // Allow unauthenticated requests - resolvers will handle auth
+    c.set('userId', null);
+    await next();
   }
 });
