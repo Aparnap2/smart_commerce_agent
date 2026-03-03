@@ -1,71 +1,76 @@
-/**
- * CopilotKit Runtime API Route
- *
- * This endpoint serves as the bridge between the CopilotKit frontend and 
- * the LangGraph-powered commerce agent.
- * 
- * Now wired with Redis checkpointer for stateful conversations.
- * Thread_id is derived from user session for per-user session persistence.
- *
- * @file app/api/copilotkit/route.ts
- */
+import { NextRequest } from 'next/server'
 
-import { NextRequest } from 'next/server';
-import {
-  CopilotRuntime,
-  LangChainAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
-} from '@copilotkit/runtime';
-import { getSupervisorGraph } from '@/lib/agents/supervisor';
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+export const runtime = 'nodejs'
 
-const initRuntime = () => {
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime: new CopilotRuntime(),
-    serviceAdapter: new LangChainAdapter({
-      chainFn: async ({ messages, tools }) => {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user?.id) {
-          throw new Error("Unauthorized. Please sign in to chat.");
-        }
-        
-        // Get the supervisor graph with Redis checkpointer
-        const graph = await getSupervisorGraph();
-        
-        // Use user ID as thread_id for per-user session persistence
-        const threadId = session.user.id;
-        
-        // Prepare the state from messages
-        const state = {
-          messages: messages.map((m: any) => 
-            `${m._getType()}: ${m.content}`
-          ),
-          userId: session.user.id,
-        };
+// CopilotKit frontend sends POST here.
+// We proxy to agent-core which handles all LangGraph logic.
+export async function POST(req: NextRequest) {
+  const userId = req.headers.get('x-user-id')
+  const token  =
+    req.headers.get('authorization') ??
+    `Bearer ${req.cookies.get('token')?.value ?? ''}`
 
-        // Invoke the graph with thread_id for stateful conversation
-        return graph.invoke(state, {
-          configurable: {
-            thread_id: threadId,
-            user_id: session.user.id,
-          },
-        });
+  if (!userId) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  // Normalize CopilotKit message format → agent-core format
+  // CopilotKit sends: { messages: [{role, content}], threadId?, ... }
+  // agent-core expects: { message: string, thread_id?: string }
+  const messages  = (body.messages as Array<{role:string;content:string}>) ?? []
+  const lastUser  = [...messages].reverse().find(m => m.role === 'user')
+  const agentBody = {
+    message:   lastUser?.content ?? '',
+    thread_id: (body.threadId as string | undefined) ??
+               (body.thread_id as string | undefined),
+  }
+
+  if (!agentBody.message) {
+    return Response.json({ error: 'No user message found' }, { status: 400 })
+  }
+
+  const agentUrl = `${process.env.AGENT_CORE_URL ?? 'http://localhost:8000'}/agent/chat`
+
+  let agentResp: Response
+  try {
+    agentResp = await fetch(agentUrl, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': token,
       },
-    }),
-    endpoint: '/api/copilotkit',
-  });
-  return handleRequest;
-};
+      body:   JSON.stringify(agentBody),
+      // @ts-expect-error
+      duplex: 'half',
+    })
+  } catch (err) {
+    return Response.json(
+      { error: 'Agent core unavailable', detail: String(err) },
+      { status: 502 }
+    )
+  }
 
-export const POST = async (req: NextRequest) => {
-  return initRuntime()(req);
-};
+  if (!agentResp.ok) {
+    const text = await agentResp.text()
+    return Response.json(
+      { error: 'Agent error', detail: text },
+      { status: agentResp.status }
+    )
+  }
 
-export const GET = async (req: NextRequest) => {
-  return initRuntime()(req);
-};
-
-export const OPTIONS = async (req: NextRequest) => {
-  return initRuntime()(req);
-};
+  return new Response(agentResp.body, {
+    headers: {
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}

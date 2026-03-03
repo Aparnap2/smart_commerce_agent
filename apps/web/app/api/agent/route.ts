@@ -1,78 +1,60 @@
-/**
- * E-Commerce Agent SSE API Route
- * 
- * Real LangGraph implementation with SSE streaming.
- * Proxies to the LangGraph supervisor workflow.
- */
+import { NextRequest } from 'next/server'
 
-import { createSupervisorGraph } from '@/lib/agents/supervisor';
+export const runtime = 'nodejs'
 
-export async function POST(req: Request) {
-  const body = await req.json();
-  const userId = req.headers.get('x-user-id') ?? 'anonymous';
-  const role = req.headers.get('x-user-role') ?? 'SHOPPER';
-  const threadId = body.threadId ?? crypto.randomUUID();
-  const message = body.message as string;
+export async function POST(req: NextRequest) {
+  const userId = req.headers.get('x-user-id')
+  const token  =
+    req.headers.get('authorization') ??
+    `Bearer ${req.cookies.get('token')?.value ?? ''}`
 
-  if (!message) {
-    return Response.json({ error: 'message required' }, { status: 400 });
+  if (!userId) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const graph = await createSupervisorGraph();
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      const send = (data: object) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+  const agentUrl = `${process.env.AGENT_CORE_URL ?? 'http://localhost:8000'}/agent/chat`
 
-      try {
-        const events = graph.streamEvents(
-          {
-            messages: [`user: ${message}`],
-            userId,
-          },
-          { version: 'v2', configurable: { thread_id: threadId } }
-        );
+  let agentResp: Response
+  try {
+    agentResp = await fetch(agentUrl, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': token,
+      },
+      body:   JSON.stringify(body),
+      // @ts-expect-error Next.js requires duplex for streaming proxy
+      duplex: 'half',
+    })
+  } catch (err) {
+    return Response.json(
+      { error: 'Agent core unavailable', detail: String(err) },
+      { status: 502 }
+    )
+  }
 
-        for await (const event of events) {
-          if (event.event === 'on_chat_model_stream') {
-            const chunk = event.data?.chunk?.content;
-            if (chunk) {
-              send({ type: 'delta', content: chunk });
-            }
-          }
-          if (event.event === 'on_tool_start') {
-            send({ type: 'tool_call', tool: event.name });
-          }
-          if (event.event === 'on_tool_end') {
-            send({ type: 'tool_complete', tool: event.name });
-          }
-          if (event.event === 'on_chain_end' && event.name === 'LangGraph') {
-            const state = event.data?.output;
-            if (state?.uiComponents?.length) {
-              send({ type: 'ui_actions', actions: state.uiComponents });
-            }
-            send({ type: 'thread_id', threadId });
-            send({ type: 'complete' });
-          }
-        }
-      } catch (err: unknown) {
-        send({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'Agent error',
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
+  if (!agentResp.ok) {
+    const text = await agentResp.text()
+    return Response.json(
+      { error: 'Agent error', detail: text },
+      { status: agentResp.status }
+    )
+  }
 
-  return new Response(stream, {
+  return new Response(agentResp.body, {
+    status:  200,
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
-  });
+  })
 }

@@ -7,10 +7,12 @@
  * - Calls onAddToCart callback with correct productId and quantity
  */
 
+// @vitest-environment jsdom
+import React from 'react'
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { ProductGrid } from '../../../../app/dashboard/components/genui/product-grid';
-import type { ProductData } from '../../../../lib/genui/types';
+import { ProductGrid } from '../../../app/dashboard/components/genui/product-grid';
+import type { ProductData } from '../../../lib/genui/types';
 
 const mockProducts: ProductData[] = [
   {

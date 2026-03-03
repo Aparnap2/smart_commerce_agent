@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send,
@@ -17,6 +17,12 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+import { useCopilotAction } from '@copilotkit/react-core';
+import { ProductGrid } from './components/genui/product-grid';
+import { CartDrawer } from './components/genui/cart-drawer';
+import { ActionConfirm } from './components/genui/action-confirm';
+import { OrderTimeline } from './components/genui/order-timeline';
+import type { Product, Cart, Order } from '@smart-commerce/types';
 
 // Message types
 interface Message {
@@ -211,6 +217,67 @@ export default function ChatWidget() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
 
+  // GenUI component states
+  const [showProductGrid, setShowProductGrid] = useState(false);
+  const [gridProducts, setGridProducts] = useState<Product[]>([]);
+  const [showCartDrawer, setShowCartDrawer] = useState(false);
+  const [cartData, setCartData] = useState<Cart | null>(null);
+  const [pendingActions, setPendingActions] = useState<Array<{stepId: string; step: string; tool: string; type: string}>>([]);
+  const [showOrderTimeline, setShowOrderTimeline] = useState(false);
+  const [orderData, setOrderData] = useState<Order | null>(null);
+
+  // CopilotKit actions for GenUI components
+  useCopilotAction({
+    name: 'showProductGrid',
+    description: 'Display a grid of products to the user',
+    parameters: [
+      { name: 'products', type: 'object[]', description: 'Array of products to display' }
+    ],
+    handler: async ({ products }) => {
+      setGridProducts(products as Product[]);
+      setShowProductGrid(true);
+      return { displayed: true, count: (products as Product[]).length };
+    }
+  });
+
+  useCopilotAction({
+    name: 'showCartDrawer',
+    description: 'Display the shopping cart drawer',
+    parameters: [
+      { name: 'cart', type: 'object', description: 'Cart data to display' }
+    ],
+    handler: async ({ cart }) => {
+      setCartData(cart as Cart);
+      setShowCartDrawer(true);
+      return { displayed: true };
+    }
+  });
+
+  useCopilotAction({
+    name: 'requestConfirmation',
+    description: 'Request user confirmation before executing an action',
+    parameters: [
+      { name: 'actions', type: 'object[]', description: 'Actions requiring confirmation' }
+    ],
+    handler: async ({ actions }) => {
+      setPendingActions(actions as Array<{stepId: string; step: string; tool: string; type: string}>);
+      return { awaitingConfirmation: true };
+    }
+  });
+
+  useCopilotAction({
+    name: 'showOrderTimeline',
+    description: 'Display order tracking timeline',
+    parameters: [
+      { name: 'order', type: 'object', description: 'Order data with tracking info' }
+    ],
+    handler: async ({ order }) => {
+      setOrderData(order as Order);
+      setShowOrderTimeline(true);
+      return { displayed: true };
+    }
+  });
+
   // Keep messages ref in sync
   useEffect(() => {
     messagesRef.current = messages;
@@ -246,9 +313,8 @@ export default function ChatWidget() {
         )
       );
 
-      // Simulate SSE connection to /api/agent
-      // In production, replace with actual SSE endpoint
-      const response = await fetch('/api/chat/route-ollama', {
+      // Connect to agent-core via proxy
+      const response = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -494,6 +560,38 @@ export default function ChatWidget() {
             Open Chat
           </button>
         </div>
+      )}
+
+      {/* GenUI Components */}
+      {showProductGrid && (
+        <ProductGrid
+          products={gridProducts}
+          onAddToCart={(productId, quantity) => {
+            console.log('Add to cart:', productId, quantity);
+          }}
+        />
+      )}
+
+      {showCartDrawer && cartData && (
+        <CartDrawer
+          cart={cartData}
+          onClose={() => setShowCartDrawer(false)}
+          onCheckout={() => console.log('Checkout')}
+        />
+      )}
+
+      {pendingActions.length > 0 && (
+        <ActionConfirm
+          actions={pendingActions}
+          onDecision={(stepId, approved) => {
+            console.log('Action decision:', stepId, approved);
+            setPendingActions(prev => prev.filter(a => a.stepId !== stepId));
+          }}
+        />
+      )}
+
+      {showOrderTimeline && orderData && (
+        <OrderTimeline order={orderData} />
       )}
     </div>
   );
