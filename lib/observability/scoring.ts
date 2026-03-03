@@ -99,28 +99,37 @@ Respond with a JSON object:
 }`;
 
   try {
-    // Use Azure AI Foundry for scoring
-    const response_1 = await fetch(
-      `${env.AZURE_OPENAI_BASE_URL}/openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': env.AZURE_OPENAI_API_KEY,
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert AI response evaluator. Always respond with valid JSON.',
-            },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
-        }),
-      }
-    );
+    // Use OpenAI SDK-compatible endpoint for scoring (Azure AI Foundry, OpenAI, etc.)
+    const baseUrl = env.OPENAI_BASE_URL;
+    const apiKey = env.OPENAI_API_KEY;
+    const model = env.OPENAI_MODEL || 'gpt-oss-120b';
+    const apiVersion = env.OPENAI_API_VERSION;
+    
+    // Build URL with optional api-version for Azure
+    let url = `${baseUrl}/chat/completions`;
+    if (apiVersion) {
+      url += `?api-version=${apiVersion}`;
+    }
+    
+    const response_1 = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert AI response evaluator. Always respond with valid JSON.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+      }),
+    });
 
     if (!response_1.ok) {
       throw new Error('LLM evaluation failed');
@@ -151,7 +160,7 @@ Respond with a JSON object:
         helpfulness: scores.helpfulness ?? 0.7,
       },
       feedback: parsed.feedback || ['Response evaluated successfully'],
-      evaluationModel: env.AZURE_OPENAI_DEPLOYMENT || 'gpt-oss-120b',
+      evaluationModel: env.OPENAI_MODEL || 'gpt-oss-120b',
       evaluationLatencyMs,
     };
   } catch (error) {

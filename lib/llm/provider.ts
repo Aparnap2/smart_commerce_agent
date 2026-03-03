@@ -1,11 +1,11 @@
 /**
- * LLM Provider - Azure AI Foundry ONLY
+ * LLM Provider — OpenAI SDK Pattern (Provider-Swappable)
  * 
- * NO Ollama, NO Google, NO OpenAI direct.
- * Azure AI Foundry is the sole LLM provider.
+ * Works with: Azure AI Foundry, OpenAI, Together AI, Groq, Ollama, any OpenAI-compatible endpoint
+ * Swap providers by changing .env vars — zero code changes.
  */
 
-import { AzureChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { createCircuitBreaker } from '../resilience/circuit-breaker';
 
 const DEGRADED_RESPONSE = {
@@ -13,67 +13,71 @@ const DEGRADED_RESPONSE = {
   degraded: true,
 };
 
-async function createAzureLLMAsync() {
-  if (!process.env.AZURE_OPENAI_BASE_URL) {
-    throw new Error('AZURE_OPENAI_BASE_URL is required. Check .env.local');
+function createLLMConfig() {
+  if (!process.env.OPENAI_BASE_URL) {
+    throw new Error('OPENAI_BASE_URL is required. Check .env.local');
   }
 
-  return new AzureChatOpenAI({
-    azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
-    azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-oss-120b',
-    azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
+  const baseConfig = {
+    baseURL: process.env.OPENAI_BASE_URL,
+    apiKey: process.env.OPENAI_API_KEY ?? 'placeholder',
+  };
+
+  // Add api-version query param for Azure AI Foundry
+  if (process.env.OPENAI_API_VERSION) {
+    return {
+      ...baseConfig,
+      defaultQuery: { 'api-version': process.env.OPENAI_API_VERSION },
+    };
+  }
+
+  return baseConfig;
+}
+
+async function createLLMAsync() {
+  return new ChatOpenAI({
+    model: process.env.OPENAI_MODEL ?? 'gpt-oss-120b',
     temperature: 0.2,
     maxRetries: 2,
+    configuration: createLLMConfig(),
   });
 }
 
-function createAzureLLM() {
-  if (!process.env.AZURE_OPENAI_BASE_URL) {
-    throw new Error('AZURE_OPENAI_BASE_URL is required. Check .env.local');
-  }
-
-  return new AzureChatOpenAI({
-    azureOpenAIEndpoint: process.env.AZURE_OPENAI_BASE_URL,
-    azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
-    azureOpenAIApiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-oss-120b',
-    azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21',
+function createLLM() {
+  return new ChatOpenAI({
+    model: process.env.OPENAI_MODEL ?? 'gpt-oss-120b',
     temperature: 0.2,
     maxRetries: 2,
+    configuration: createLLMConfig(),
   });
 }
 
 // Circuit-breaker wrapped export
-export const llm = createCircuitBreaker(createAzureLLMAsync, {
+export const llm = createCircuitBreaker(createLLMAsync, {
   timeout: 3000,
   errorThresholdPercentage: 50,
   resetTimeout: 30000,
 });
 
 export function getLLM() {
-  return createAzureLLM();
+  return createLLM();
 }
 
 /**
- * Generate embeddings using Azure text-embedding-3-small
+ * Get embeddings client — provider-swappable via env vars
+ */
+export function getEmbeddings() {
+  return new OpenAIEmbeddings({
+    model: process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small',
+    configuration: createLLMConfig(),
+  });
+}
+
+/**
+ * Generate embeddings for text
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch(
-    `${process.env.AZURE_OPENAI_BASE_URL}/openai/deployments/${process.env.AZURE_EMBEDDING_DEPLOYMENT}/embeddings?api-version=${process.env.AZURE_OPENAI_API_VERSION ?? '2024-10-21'}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': process.env.AZURE_OPENAI_API_KEY!,
-      },
-      body: JSON.stringify({ input: text }),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Embedding API error: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  return data.data?.[0]?.embedding || [];
+  const embeddings = getEmbeddings();
+  const result = await embeddings.embedQuery(text);
+  return result;
 }

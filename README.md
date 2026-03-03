@@ -43,7 +43,8 @@ Production-grade agentic e-commerce CX platform. A 3-service monorepo with Next.
 | Frontend | Next.js 15, shadcn/ui, CopilotKit |
 | Commerce API | Hono + Bun, GraphQL Yoga, Prisma JS |
 | Agent Core | FastAPI + Python, LangGraph, Azure OpenAI |
-| LLM | Azure AI Foundry (gpt-oss-120b) |
+| LLM | OpenAI SDK-compatible (Azure AI Foundry gpt-oss-120b) |
+| Embeddings | text-embedding-3-small (1536-dim) |
 | DB | PostgreSQL 16 + pgvector |
 | Cache | Redis 7 |
 | Observability | Langfuse |
@@ -106,12 +107,15 @@ JWT_SECRET=your-jwt-secret
 AGENT_CORE_URL=http://localhost:8000
 COMMERCE_API_URL=http://localhost:3001
 
-# Azure AI Foundry
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com
-AZURE_OPENAI_API_KEY=your-api-key
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
-AZURE_OPENAI_API_VERSION=2024-10-21
-AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+# LLM Provider (OpenAI SDK pattern — works with Azure AI Foundry, OpenAI, Together AI, Groq, etc.)
+# Swap providers by changing these — zero code changes
+OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/v1
+OPENAI_API_KEY=your-azure-api-key
+OPENAI_MODEL=gpt-oss-120b
+OPENAI_API_VERSION=2024-10-21  # Required for Azure, omit for OpenAI
+
+# Embeddings
+EMBEDDING_MODEL=text-embedding-3-small
 
 # Langfuse
 LANGFUSE_PUBLIC_KEY=pk-...
