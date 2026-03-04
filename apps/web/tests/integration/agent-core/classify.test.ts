@@ -14,16 +14,18 @@ const AGENT = 'http://localhost:8000'
 let TOKEN = ''
 
 beforeAll(async () => {
-  const r = await fetch('http://localhost:3000/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: 'shopper@test.com',
-      password: 'Test1234!'
-    })
+  // Generate test token directly
+  const jwt = await import('jose')
+  const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'test-secret-change-in-prod-min-32-chars-long')
+  TOKEN = await new jwt.SignJWT({
+    userId: 'test-user-1',
+    email: 'shopper@test.com',
+    role: 'SHOPPER'
   })
-  const d = await r.json()
-  TOKEN = d.token ?? ''
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .sign(secret)
 })
 
 async function readSSE(response: Response, timeoutMs = 15000) {
@@ -51,7 +53,7 @@ async function readSSE(response: Response, timeoutMs = 15000) {
 }
 
 describe('Agent Core Chat', () => {
-  it.skip('valid token returns SSE stream', async () => {
+  it('valid token returns SSE stream', async () => {
     const r = await fetch(`${AGENT}/agent/chat`, {
       method: 'POST',
       headers: {
@@ -64,7 +66,7 @@ describe('Agent Core Chat', () => {
     expect(r.headers.get('content-type')).toContain('text/event-stream')
   })
 
-  it.skip('SSE stream ends with complete event', async () => {
+  it('SSE stream ends with complete event', async () => {
     const r = await fetch(`${AGENT}/agent/chat`, {
       method: 'POST',
       headers: {
@@ -77,7 +79,7 @@ describe('Agent Core Chat', () => {
     expect(events.some(e => e.type === 'complete')).toBe(true)
   }, 25000)
 
-  it.skip('missing token returns 401', async () => {
+  it('missing token returns 401', async () => {
     const r = await fetch(`${AGENT}/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -86,7 +88,7 @@ describe('Agent Core Chat', () => {
     expect(r.status).toBe(401)
   })
 
-  it.skip('/health is unauthenticated', async () => {
+  it('/health is unauthenticated', async () => {
     const r = await fetch(`${AGENT}/health`)
     expect(r.status).toBe(200)
     const b = await r.json()

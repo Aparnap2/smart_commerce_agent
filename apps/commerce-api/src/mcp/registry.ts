@@ -9,6 +9,127 @@ export const createMCPRegistry = (db: PrismaClient) => {
   // Health check
   mcp.get('/health', (c) => c.json({ status: 'ok', service: 'mcp' }));
 
+  // List available tools
+  mcp.get('/tools', (c) => {
+    const tools = [
+      {
+        name: 'get_order',
+        description: 'Get a specific order by ID',
+        endpoint: '/mcp/tool/get_order',
+        method: 'POST',
+        parameters: {
+          orderId: 'number (required)',
+          userId: 'string (required)',
+        },
+      },
+      {
+        name: 'list_orders',
+        description: 'List orders for a user',
+        endpoint: '/mcp/tool/list_orders',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          status: 'enum [pending, processing, shipped, delivered, cancelled] (optional)',
+          limit: 'number (default: 20)',
+          offset: 'number (default: 0)',
+        },
+      },
+      {
+        name: 'get_product',
+        description: 'Get a product by ID',
+        endpoint: '/mcp/tool/get_product',
+        method: 'POST',
+        parameters: {
+          productId: 'number (required)',
+        },
+      },
+      {
+        name: 'search_products',
+        description: 'Search products by query',
+        endpoint: '/mcp/tool/search_products',
+        method: 'POST',
+        parameters: {
+          query: 'string (required)',
+          category: 'string (optional)',
+          minPrice: 'number (optional)',
+          maxPrice: 'number (optional)',
+          inStock: 'boolean (optional)',
+          limit: 'number (default: 10, max: 50)',
+        },
+      },
+      {
+        name: 'create_refund',
+        description: 'Create a refund for an order',
+        endpoint: '/mcp/tool/create_refund',
+        method: 'POST',
+        parameters: {
+          orderId: 'number (required)',
+          userId: 'string (required)',
+          reason: 'enum [defective, not_as_described, wrong_item, changed_mind, other] (required)',
+          reasonDescription: 'string (optional)',
+          amount: 'number (optional)',
+        },
+      },
+      {
+        name: 'get_cart',
+        description: 'Get cart contents',
+        endpoint: '/mcp/tool/get_cart',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          cartId: 'string (optional)',
+        },
+      },
+      {
+        name: 'add_to_cart',
+        description: 'Add a product to cart',
+        endpoint: '/mcp/tool/add_to_cart',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          productId: 'number (required)',
+          quantity: 'number (default: 1)',
+        },
+      },
+      {
+        name: 'create_support_ticket',
+        description: 'Create a support ticket',
+        endpoint: '/mcp/tool/create_support_ticket',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          orderId: 'number (optional)',
+          subject: 'string (required)',
+          description: 'string (required)',
+          category: 'enum [order_status, shipping, return, refund, product_info, payment, account, technical, other] (required)',
+          priority: 'enum [low, medium, high, urgent] (default: medium)',
+        },
+      },
+      {
+        name: 'orders.create_from_cart',
+        description: 'Create an order from cart',
+        endpoint: '/mcp/tool/orders.create_from_cart',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          cartId: 'string (required)',
+        },
+      },
+      {
+        name: 'orders.cancel',
+        description: 'Cancel an order',
+        endpoint: '/mcp/tool/orders.cancel',
+        method: 'POST',
+        parameters: {
+          userId: 'string (required)',
+          orderId: 'number (required)',
+        },
+      },
+    ];
+
+    return c.json({ tools });
+  });
+
   // Get order tool
   mcp.post(
     '/tool/get_order',
