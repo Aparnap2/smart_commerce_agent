@@ -134,6 +134,32 @@ health:
 	  && echo "✅ agent-core   :8000" \
 	  || echo "❌ agent-core   :8000"
 
+# ── E2E tests (requires all 3 services running) ───────────────
+e2e-test:
+	@echo "Checking services before E2E..."
+	@curl -sf http://localhost:3001/health >/dev/null 2>&1 \
+	  || (echo "❌ Start commerce-api first: make dev-api" && exit 1)
+	@curl -sf http://localhost:8000/health >/dev/null 2>&1 \
+	  || (echo "❌ Start agent-core first: make dev-agent" && exit 1)
+	@curl -sf http://localhost:3000/ >/dev/null 2>&1 \
+	  || (echo "❌ Start web first: make dev-web" && exit 1)
+	@echo "✅ All services up — running E2E tests"
+	pnpm --filter @smart-commerce/web vitest run tests/e2e/smoke.test.ts \
+	  --reporter=verbose
+
+# ── Full test suite (unit + integration where possible) ────────
+test-all:
+	@echo "Running unit tests (no services needed)..."
+	pnpm --filter @smart-commerce/web vitest run tests/unit/ --reporter=dot
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════"
+	@echo "Unit tests complete. For integration/E2E tests:"
+	@echo "  1. make infra-up"
+	@echo "  2. make dev-api  (in terminal 2)"
+	@echo "  3. make dev-agent (in terminal 3)"
+	@echo "  4. make e2e-test"
+	@echo "═══════════════════════════════════════════════════════"
+
 # ── Cleanup ─────────────────────────────────────────────────
 prune:
 	docker system prune -f

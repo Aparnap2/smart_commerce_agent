@@ -126,4 +126,4 @@ services:
 volumes:
   postgres_data:
     external: true
-    name: smart-commerce_postgres_data
+    name: vercel-ai-sdk_postgres_data
