@@ -7,7 +7,9 @@ Production-grade agentic e-commerce CX platform. A 3-service monorepo with Next.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENT LAYER                              │
-│  apps/web/ → Next.js 15 + GenUI canvas + proxies agent calls    │
+│  apps/web/ → Next.js 15 Chat-First Canvas (no navigation tabs)  │
+│  - Shell using 100dvh CSS Grid (Rail + Chat Column)             │
+│  - Virtualized anchor scroll for high-performance streaming     │
 ├─────────────────────────────────────────────────────────────────┤
 │                        SERVICE LAYER                             │
 │  ┌─────────────────────┐  ┌─────────────────────────────────┐  │

@@ -4,7 +4,7 @@
 Production-grade agentic e-commerce CX platform. AI agents handle product discovery, cart management, checkout, order tracking, and support via natural language + GenUI components.
 
 ## Vision
-Hands-free commerce: agents hydrate context, plan multi-step tool chains, execute autonomously, and render their own UI. Users primarily confirm critical actions.
+**AI-First Commerce**: The interface is a single conversation surface where the agent is the navigation. GenUI components (Product Grids, Carts, Checkouts) are first-class content rendered inline at full width, eliminating the cognitive split of sidebars or tabbed navigation. The agent autonomously plans, executes, and brings the view to the user.
 
 ## Architecture
 3-service monorepo:
@@ -27,12 +27,18 @@ Hands-free commerce: agents hydrate context, plan multi-step tool chains, execut
 - Circuit breaker for resilience
 - Human-in-the-loop for critical actions
 
-### GenUI Components
-- ProductGrid - Display search results
-- ProductCard - Individual product display
-- CartDrawer - Shopping cart overlay
-- ActionConfirm - Human-in-the-loop for critical actions
-- OrderTimeline - Order status visualization
+### GenUI Components (Inline & Full-Width)
+- **ProductGrid** - Horizontal scroll-snap grid for search results (full width).
+- **ProductCard** - High-fidelity individual product display with blur placeholders.
+- **CartCanvas** - Inline shopping cart management (replaces traditional overlays).
+- **ActionConfirm** - High-consequence authorization card (e.g., checkout placement).
+- **OrderTimeline** - Interactive vertical stepper for tracking.
+
+### UX Design Rules
+1. **No Navigation Chrome**: Left rail for thread history and live context only; no top tabs.
+2. **Full-Width GenUI**: Cards inherit 100% of the chat column width for maximum impact.
+3. **Input-Primary CTA**: Every action starts as a message; the agent decides the response mode.
+4. **Fluid Layout**: 100dvh CSS Grid with virtualized anchor scrolling for long threads.
 
 ### Search & RAG
 - Hybrid search (FTS + pgvector 1536-dim)
