@@ -1,0 +1,10 @@
+{
+  "name": "@smart-commerce/errors",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./python": "./src/errors.py"
+  }
+}

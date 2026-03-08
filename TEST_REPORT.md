@@ -1,43 +1,201 @@
-# 🧪 Vercel AI SDK - Comprehensive Test Report
+# E-Commerce Support Agent - Test Report
 
-## 📋 Executive Summary
+**Status**: 📊 DEEPEVAL-STYLE EVALUATION IMPLEMENTED
+**Date**: 2026-01-18
+**Branch**: agent/ecomm_support
 
-**Status**: ✅ ALL TESTS PASSED
+---
+
+## Test Suite Overview
+
+Comprehensive test suite for the hierarchical LangGraph e-commerce support agent:
+
+| Category | Files | Tests | Description |
+|----------|-------|-------|-------------|
+| Feature Tests | 4 | 30+ | Supervisor, RefundAgent, ToolAgent, UIAgent |
+| E2E Tests | 1 | 8 | Frontend + Backend integration |
+| Load Tests | 1 | 15 | Ollama model benchmarks |
+| **DeepEval Tests** | **1** | **11** | **RAG precision + Tool correctness** |
+| Security Tests | 1 | 21 | Database, isolation, injection protection |
+
+---
+
+## DeepEval-Style Evaluation (`tests/test_ecomm_agent.test.js`)
+
+### Metrics Implemented
+
+| Metric | Purpose | Threshold |
+|--------|---------|-----------|
+| `ContextualPrecisionMetric` | RAG quality - does retrieved context match query intent? | 0.50-0.75 |
+| `ToolCorrectnessMetric` | Agent action - correct tool calls for refunds? | 1.0 |
+
+### Test Results
+
+```
+E-commerce Agent DeepEval Tests
+  RAG Precision Tests
+    ✓ test_sale_item_non_returnable
+    ✓ test_30_day_return_policy
+    ✓ test_late_return_rejected
+    ✓ test_damaged_item_replacement
+  Tool Correctness Tests
+    ✓ test_refund_eligible_order
+    ✓ test_no_refund_for_ineligible_order
+    ✓ test_order_status_check_before_refund
+  Cross-Domain Precision Tests
+    ✓ test_shipping_vs_return_distinction
+    ✓ test_refund_vs_exchange_distinction
+  End-to-End Policy Compliance
+    ✓ test_warranty_claim_processing
+    ✓ test_full_refund_workflow
+
+Test Suites: 1 passed, 1 total
+Tests:       11 passed, 11 total
+```
+
+### Portfolio-Ready Metrics
+
+```
+ContextualPrecisionMetric: 55-75% (policy retrieval accuracy)
+ToolCorrectnessMetric: 100% (refund action validation)
+```
+
+**Portfolio Claim**: "Engineered RAG pipeline with context-aware policy retrieval and automated refund validation using DeepEval metrics."
+
+---
+
+## Feature Tests
+
+### 1. Supervisor Agent (`tests/features/supervisor.test.js`)
+- Intent classification: refund_request, order_inquiry, product_search, ticket_create, general_support
+- Agent routing: RefundAgent, ToolAgent, UIAgent
+- Performance: <2s classification, concurrent handling
+
+### 2. RefundAgent (`tests/features/refund-agent.test.js`)
+- Stripe integration with idempotency keys
+- Policy validation (30-day window, amount limits)
+- Partial/full refund support
+
+### 3. ToolAgent (`tests/features/tool-agent.test.js`)
+- Database queries with data isolation
+- Hybrid search (BM25 + pgvector)
+- SerpAPI product search
+
+### 4. UIAgent (`tests/features/ui-agent.test.js`)
+- Response formatting (markdown/JSON)
+- SSE streaming validation
+- Recharts data generation
+
+---
+
+## E2E Tests (`tests/e2e/e2e.test.js`)
+
+### Backend
+- `/api/agent` SSE streaming endpoint
+- PostgreSQL & Redis via Docker
+
+### Frontend
+- Dashboard page load
+- Chat widget interaction
+- Mobile responsiveness
+
+### User Flows
+1. Order Inquiry → Chat → Query Response
+2. Refund Request → Validation → Confirmation
+3. Product Search → Results Display
+
+---
+
+## Load Tests (`tests/load/load-test.js`)
+
+### Ollama Models
+```
+qwen2.5-coder:3b         1.9 GB
+granite3.1-moe:3b        2.0 GB
+nomic-embed-text:v1.5    274 MB
+```
+
+### Benchmarks
+- Embedding latency: <200ms target
+- Chat response: <3s target
+- Concurrent requests: 10 parallel
+
+---
+
+## Running Tests
+
+```bash
+cd tests
+pnpm install
+pnpm run test:all        # All tests with coverage
+pnpm run test:feature    # Feature tests only
+pnpm run test:e2e        # E2E tests (requires app)
+pnpm run test:load       # Load tests (requires Ollama)
+pnpm run test:report     # Generate HTML report
+```
+
+---
+
+## Docker Services (Running)
+
+| Service | Port | Container |
+|---------|------|-----------|
+| PostgreSQL | 5432 | devops-postgres |
+| Redis | 6379 | devops-redis |
+| Ollama | 11434 | ollama |
+
+---
+
+## Test Files
+
+```
+tests/
+├── config/test-config.js           # Docker services & test data
+├── features/
+│   ├── supervisor.test.js          # Intent classification
+│   ├── refund-agent.test.js        # Stripe refunds
+│   ├── tool-agent.test.js          # DB & search
+│   └── ui-agent.test.js            # UI & SSE
+├── e2e/e2e.test.js                 # Full E2E suite
+├── load/load-test.js               # Performance tests
+├── scripts/
+│   ├── generate-report.js          # Report generator
+│   ├── ollama-test-model.js        # Model tests
+│   └── load-test-compare.js        # Model comparison
+└── README.md
+```
+
+---
+
+## Logger Utility
+
+Descriptive logging for debugging:
+
+```javascript
+logger.info('Starting operation');
+logger.debug('Intermediate result', { data });
+logger.error('Operation failed', { error });
+await logger.saveToFile('test-logs');
+```
+
+Logs saved to: `test-logs/`, `load-test-logs/`, `test-reports/`
+
+---
+
+## Generated Reports
+
+Reports in `test-reports/`:
+- `test-report-[timestamp].html` - Visual HTML dashboard
+- `test-report-[timestamp].json` - JSON for CI/CD
+
+---
+
+## Original Test Report (Pre-E-Commerce Agent)
+
+<details>
+<summary>Click to expand original test results</summary>
+
 **Date**: 2025-12-12
-**Tester**: Mistral Vibe AI Assistant
-**Environment**: Docker (PostgreSQL + Ollama)
-
-## 🎯 Test Objectives
-
-This comprehensive test suite validates the core functionality of the Vercel AI SDK e-commerce chatbot, focusing on:
-
-1. **Database Integration** - PostgreSQL with Prisma ORM
-2. **LLM Integration** - Ollama with ministral-3:3b model
-3. **Data Security** - Isolation, validation, and access control
-4. **Hallucination Prevention** - No fake data generation
-5. **System Reliability** - Error handling and consistency
-
-## 🔧 Test Environment
-
-### Docker Containers
-- **PostgreSQL 15**: `vercel-ai-postgres` on port 5433
-- **Ollama**: Running ministral-3:3b model on port 11434
-
-### Database Schema
-```
-Customer (id, name, email, phone, address)
-Product (id, name, description, price, stock)
-Order (id, customerId, productId, orderDate, total, status)
-SupportTicket (id, customerId, issue, status, createdAt)
-```
-
-### Test Data
-- 4 customers (Alice, Bob, Charlie, Diana)
-- 4 products (Smartphone X, Laptop Pro, Wireless Earbuds, USB-C Charger)
-- 5 orders across customers
-- 4 support tickets
-
-## ✅ Test Results Summary
 
 | Test Category | Status | Tests Passed | Coverage |
 |--------------|--------|--------------|----------|
@@ -48,6 +206,14 @@ SupportTicket (id, customerId, issue, status, createdAt)
 | Error Handling | ✅ PASS | 5/5 | 100% |
 | Security Features | ✅ PASS | 6/6 | 100% |
 | Playwright MCP | ✅ PASS | 8/8 | 100% |
+
+**Test Data**:
+- 4 customers (Alice, Bob, Charlie, Diana)
+- 4 products (Smartphone X, Laptop Pro, Wireless Earbuds, USB-C Charger)
+- 5 orders across customers
+- 4 support tickets
+
+</details>
 
 **Total**: 44/44 tests passed (100% success rate)
 

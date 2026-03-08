@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-01-23T06:51:51.281Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should be responsive on mobile",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.282Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should be responsive on mobile",
+    "message": "Testing mobile responsiveness"
+  },
+  {
+    "timestamp": "2026-01-23T06:51:51.313Z",
+    "level": "WARN",
+    "test": "E2E-E2E: Frontend + Backend Integration Frontend: Dashboard Page should be responsive on mobile",
+    "message": "Mobile test skipped"
+  }
+]

@@ -1,0 +1,105 @@
+---
+description: TDD workflow for every code change
+globs: ["**/*.ts", "**/*.tsx", "**/*.py"]
+alwaysApply: true
+---
+
+# TDD Rules — Non-Negotiable
+
+## The Law
+Write the test FIRST. Every single time. No exceptions.
+Red → Green → Refactor. Not Green → Red → Skip.
+
+## Why TDD Stops Hallucination
+When tests exist before the code, the agent cannot write a test that
+confirms broken behavior. Tests are the spec, not the afterthought.
+
+## Workflow Per Feature
+
+### 1. Write a failing test (RED)
+```typescript
+// tests/unit/mcp/cart.test.ts
+it("should prevent adding out-of-stock product to cart", async () => {
+  // Arrange: seed product with stock=0
+  const product = await seedProduct({ stock: 0 });
+  const userId = "test-user-1";
+
+  // Act + Assert: expect specific error
+  await expect(
+    cartAddItem({ productId: product.id, quantity: 1 }, userId)
+  ).rejects.toThrow("OUT_OF_STOCK");
+});
+```
+Run it: `pnpm test cart.test.ts` → confirm it FAILS with the right message.
+
+### 2. Write minimum code to pass (GREEN)
+Only write what's needed to pass the test. No speculative code.
+
+### 3. Confirm GREEN
+```bash
+pnpm test cart.test.ts
+# Must show: ✓ should prevent adding out-of-stock product to cart
+```
+
+### 4. Refactor (CLEAN)
+Clean the implementation. Run tests again. Still green? Ship it.
+
+## Test Types
+
+### Unit Tests (Vitest — fast, pure)
+- Location: `tests/unit/`
+- Use real Docker Postgres + Redis (no mocks)
+- Seed minimal fixtures in beforeEach
+- Clean DB in afterEach: `DELETE FROM "CartItem"; DELETE FROM "Cart";`
+
+### Integration Tests (Vitest — real LLM)
+- Location: `tests/integration/`
+- Use real Azure AI Foundry (actual API call)
+- Tag with `@integration` to run separately
+- Run with: `pnpm test:integration`
+
+### E2E Tests (Playwright)
+- Location: `tests/e2e/`
+- Must run against live Docker stack
+- Run with: `pnpm playwright test`
+
+## Test File Naming
+```
+tests/
+├── unit/
+│   ├── mcp/
+│   │   ├── catalog.test.ts     # catalog.search, catalog.recommend
+│   │   ├── cart.test.ts        # all cart.* tools
+│   │   └── orders.test.ts      # all orders.* tools
+│   ├── search/
+│   │   ├── hybrid.test.ts      # FTS + vector rerank
+│   │   └── embeddings.test.ts  # Azure embedding calls
+│   └── agents/
+│       ├── classify.test.ts    # intent classification
+│       └── supervisor.test.ts  # full graph runs
+└── integration/
+    ├── checkout.test.ts        # full cart → Stripe payment intent
+    └── rag.test.ts             # full RAG pipeline eval
+```
+
+## Before Marking Any Task Done in TASKS.md
+
+```bash
+# All unit tests pass
+pnpm test --passWithNoTests
+
+# Specific feature tests pass
+pnpm test [feature].test.ts
+
+# DB state is what you expect
+docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce \
+  -c "SELECT * FROM \"[Table]\" ORDER BY \"createdAt\" DESC LIMIT 3;"
+
+# No TypeScript errors
+pnpm tsc --noEmit
+
+# No lint errors
+pnpm lint
+```
+
+Only after all 4 pass → update TASKS.md → move to next task.

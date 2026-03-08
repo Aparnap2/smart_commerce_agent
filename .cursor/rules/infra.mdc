@@ -1,0 +1,111 @@
+---
+description: Infrastructure rules — Docker, Azure, environment
+globs: ["docker-compose*.yml", "**/.env*", "**/Makefile", "**/*.sh"]
+alwaysApply: true
+---
+
+# Infrastructure Rules
+
+## Docker — Always Check First
+
+Before ANY task that touches data or LLM:
+
+```bash
+docker ps -a
+```
+
+Expected output (4 containers, all healthy):
+```
+smart-commerce-app-1        Up    3000->3000
+smart-commerce-postgres-1   Up (healthy)  5432->5432
+smart-commerce-redis-1      Up (healthy)  6379->6379
+smart-commerce-langfuse-1   Up    3001->3000
+```
+
+If any container is missing or unhealthy:
+```bash
+docker compose -f docker-compose.dev.yml up -d
+# Wait 10s, then check again
+docker ps -a
+```
+
+If postgres is unhealthy:
+```bash
+docker compose -f docker-compose.dev.yml restart postgres
+docker exec smart-commerce-postgres-1 pg_isready
+```
+
+## Azure AI Foundry — LLM Rules
+
+- **Always use**: `import { llm } from "@/lib/llm/client"`
+- **Never use**: `new OpenAI()` or `new AzureOpenAI()` directly in feature code
+- **Never use**: Ollama, local models, or mocks in integration tests
+- **Verify connection**:
+
+```bash
+curl -X POST http://localhost:3000/api/test-llm \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"ping"}'
+```
+
+## Environment Variables
+
+- All secrets in `.env.local` (gitignored)
+- Never hardcode. Never console.log secrets.
+- Access in code: `process.env.AZURE_OPENAI_API_KEY!`
+- The `!` is required — all env vars are validated at startup
+
+## Database Rules
+
+```bash
+# Check schema state
+docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce -c "\dt"
+
+# Check product count (should be >0 after seed)
+docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce \
+  -c "SELECT COUNT(*) FROM \"Product\";"
+
+# Check pgvector extension
+docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce \
+  -c "SELECT * FROM pg_extension WHERE extname='vector';"
+
+# Run pending migrations
+pnpm prisma migrate deploy
+
+# Reseed
+pnpm prisma db seed
+```
+
+## Redis Rules
+
+```bash
+# Check Redis is up
+docker exec smart-commerce-redis-1 redis-cli ping
+# Expected: PONG
+
+# Check LangGraph checkpoint keys
+docker exec smart-commerce-redis-1 redis-cli keys "langgraph:*"
+
+# Check semantic cache
+docker exec smart-commerce-redis-1 redis-cli keys "search:cache:*"
+
+# Flush cache only (not checkpoints)
+docker exec smart-commerce-redis-1 redis-cli --scan --pattern "search:cache:*" \
+  | xargs docker exec smart-commerce-redis-1 redis-cli DEL
+```
+
+## context7 Usage
+
+Always append `use context7` when working with:
+- LangGraph: "How do I add conditional edges to a StateGraph? use context7"
+- CopilotKit: "How do I render React component from useCopilotAction? use context7"
+- Stripe MCP: "What tools are available in @stripe/agent-toolkit? use context7"
+- Prisma: "How do I use $queryRaw with pgvector? use context7"
+- pgvector: "HNSW index creation syntax for cosine distance? use context7"
+
+## ddg-mcp Usage
+
+Use DuckDuckGo MCP for:
+- Azure AI Foundry SDK examples not in context7
+- Debugging error messages: search exact error string
+- Checking if a library has breaking changes

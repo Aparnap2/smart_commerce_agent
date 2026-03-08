@@ -1,0 +1,23 @@
+--- STARTING CORE VERIFICATION ---
+
+1. Verifying Database Connection (Prisma)...
+❌ Failed: Database error: PrismaClientInitializationError: 
+Invalid `prisma.product.count()` invocation in
+/home/aparna/Desktop/vercel-ai-sdk/test-core.ts:15:51
+
+  12 console.log('\n1. Verifying Database Connection (Prisma)...');
+  13 const prisma = new PrismaClient();
+  14 try {
+→ 15     const productCount = await prisma.product.count(
+Authentication failed against database server, the provided database credentials for `postgres` are not valid.
+
+Please make sure to provide valid database credentials for the database server at the configured address.
+    at zn.handleRequestError (/home/aparna/Desktop/vercel-ai-sdk/node_modules/.pnpm/@prisma+client@6.7.0_prisma@6.7.0_typescript@5.8.3__typescript@5.8.3/node_modules/@prisma/client/runtime/library.js:121:7759)
+    at zn.handleAndLogRequestError (/home/aparna/Desktop/vercel-ai-sdk/node_modules/.pnpm/@prisma+client@6.7.0_prisma@6.7.0_typescript@5.8.3__typescript@5.8.3/node_modules/@prisma/client/runtime/library.js:121:6784)
+    at zn.request (/home/aparna/Desktop/vercel-ai-sdk/node_modules/.pnpm/@prisma+client@6.7.0_prisma@6.7.0_typescript@5.8.3__typescript@5.8.3/node_modules/@prisma/client/runtime/library.js:121:6491)
+    at async l (/home/aparna/Desktop/vercel-ai-sdk/node_modules/.pnpm/@prisma+client@6.7.0_prisma@6.7.0_typescript@5.8.3__typescript@5.8.3/node_modules/@prisma/client/runtime/library.js:130:9778)
+    at async verifyCore (/home/aparna/Desktop/vercel-ai-sdk/test-core.ts:15:30) {
+  clientVersion: '6.7.0',
+  errorCode: undefined,
+  retryable: undefined
+}

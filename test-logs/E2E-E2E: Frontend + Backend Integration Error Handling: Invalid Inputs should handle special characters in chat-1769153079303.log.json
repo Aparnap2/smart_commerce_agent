@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": "2026-01-23T07:24:39.279Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Invalid Inputs should handle special characters in chat",
+    "message": "Starting test"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:39.280Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Invalid Inputs should handle special characters in chat",
+    "message": "Testing special character handling"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:39.284Z",
+    "level": "WARN",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Invalid Inputs should handle special characters in chat",
+    "message": "Special character test skipped"
+  },
+  {
+    "timestamp": "2026-01-23T07:24:39.284Z",
+    "level": "INFO",
+    "test": "E2E-E2E: Frontend + Backend Integration Error Handling: Invalid Inputs should handle special characters in chat",
+    "message": "Cleaning up E2E tests"
+  }
+]

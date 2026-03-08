@@ -1,35 +1,129 @@
-version: '3.8'
+# Smart Commerce Agent — Docker Compose (Phase 7)
+# 4-core services: postgres, redis, commerce-api, agent-core
+# Langfuse moved to separate file (optional — high memory usage)
+
+version: '3.9'
+
 services:
+
+  # ─────────────────────────────────────────────────────────
+  # Database (PostgreSQL 16 + pgvector)
+  # ─────────────────────────────────────────────────────────
   postgres:
-    image: postgres:15
-    container_name: vercel_ai_postgres
+    image: pgvector/pgvector:pg16
+    container_name: smart-commerce-postgres
     environment:
-      POSTGRES_DB: vercel_ai
-      POSTGRES_USER: vercel_user
-      POSTGRES_PASSWORD: vercel_pass
+      POSTGRES_DB:       smart_commerce
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vercel_user -d vercel_ai"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test:     ["CMD-SHELL", "pg_isready -U postgres -d smart_commerce"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+    restart: unless-stopped
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
+  # ─────────────────────────────────────────────────────────
+  # Cache & Checkpoints (Redis)
+  # ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: smart-commerce-redis
     ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:11434"]
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout:  3s
+      retries:  5
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────
+  # Commerce API (Node.js + Hono + GraphQL + MCP)
+  # ─────────────────────────────────────────────────────────
+  commerce-api:
+    build:
+      context:    .
+      dockerfile: apps/commerce-api/Dockerfile
+    container_name: smart-commerce-commerce-api
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL:       postgresql://postgres:postgres@postgres:5432/smart_commerce
+      REDIS_URL:          redis://redis:6379
+      JWT_SECRET:         ${JWT_SECRET}
+      OPENAI_API_KEY:     ${OPENAI_API_KEY}
+      OPENAI_BASE_URL:    ${OPENAI_BASE_URL}
+      OPENAI_MODEL:       ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-2024-10-21}
+      EMBEDDING_MODEL:    ${EMBEDDING_MODEL:-text-embedding-3-small}
+      NODE_ENV:           production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:     ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout:  5s
+      retries:  5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ─────────────────────────────────────────────────────────
+  # Agent Core (Python + FastAPI + LangGraph)
+  # ─────────────────────────────────────────────────────────
+  agent-core:
+    build:
+      context:    .
+      dockerfile: apps/agent-core/Dockerfile
+    container_name: smart-commerce-agent-core
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL:       postgresql://postgres:postgres@postgres:5432/smart_commerce
+      REDIS_URL:          redis://redis:6379
+      COMMERCE_API_URL:   http://commerce-api:3001
+      JWT_SECRET:         ${JWT_SECRET}
+      OPENAI_API_KEY:     ${OPENAI_API_KEY}
+      OPENAI_BASE_URL:    ${OPENAI_BASE_URL}
+      OPENAI_MODEL:       ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-2024-10-21}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      commerce-api:
+        condition: service_healthy
+    healthcheck:
+      test:     ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 25s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   postgres_data:
-  ollama_data:
+    external: true
+    name: vercel-ai-sdk_postgres_data

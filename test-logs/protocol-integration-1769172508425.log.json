@@ -1,0 +1,14 @@
+[
+  {
+    "timestamp": "2026-01-23T12:48:28.417Z",
+    "level": "INFO",
+    "test": "Protocol-Integration",
+    "message": "Testing MCP db_query tool for orders"
+  },
+  {
+    "timestamp": "2026-01-23T12:48:28.418Z",
+    "level": "INFO",
+    "test": "Protocol-Integration",
+    "message": "Testing hybrid search for products"
+  }
+]
