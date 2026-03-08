@@ -79,7 +79,12 @@ function ToolExecutionBadge({ toolCalls }: { toolCalls: ToolCall[] }) {
 }
 
 // Message bubble component
-function MessageBubble({ message }: { message: Message }) {
+interface MessageBubbleProps {
+  message: Message;
+  key?: React.Key | null;
+}
+
+function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -98,7 +103,7 @@ function MessageBubble({ message }: { message: Message }) {
           className={`px-4 py-2.5 rounded-2xl ${
             isUser
               ? 'bg-blue-600 text-white rounded-br-md'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-md'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-zinc-100 rounded-bl-md'
           }`}
         >
           {message.role === 'user' ? (

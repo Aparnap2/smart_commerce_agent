@@ -3,6 +3,7 @@
  */
 import dotenv from 'dotenv';
 import path from 'path';
+import '@testing-library/jest-dom/vitest';
 
 // Load .env.local first so env vars are available
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });

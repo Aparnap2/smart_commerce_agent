@@ -9,76 +9,59 @@
 
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useChatStream, type ChatMessage } from '@/hooks/useChatStream';
-import { StreamingMessage } from './StreamingMessage';
-import { AgentThinking } from './AgentThinking';
-import { GenUIRouter } from '@/components/genui/GenUIRouter';
+import { EmptyState } from './EmptyState';
+
+/**
+ * Message interface for ChatCanvas
+ */
+interface ChatCanvasMessage {
+  /** Unique message identifier */
+  id: string;
+  /** Message role - user or assistant */
+  role: 'user' | 'assistant';
+  /** React node to display as message content */
+  display: ReactNode;
+}
 
 /**
  * Props for ChatCanvas component
  */
 interface ChatCanvasProps {
-  /** Chat stream from useChatStream hook */
-  chatStream: ReturnType<typeof useChatStream>;
-}
-
-/**
- * ErrorCard component displays error messages
- */
-function ErrorCard({ message }: { message: string }) {
-  return (
-    <div
-      className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
-      role="alert"
-      aria-live="assertive"
-    >
-      <div className="flex items-start gap-3">
-        <svg
-          className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        <p className="text-sm text-red-800 dark:text-red-300">{message}</p>
-      </div>
-    </div>
-  );
+  /** Array of messages to display */
+  messages: ChatCanvasMessage[];
+  /** Loading state indicator */
+  isLoading?: boolean;
 }
 
 /**
  * ChatCanvas Component
  *
  * Displays chat messages with virtualized scrolling for performance.
- * Supports multiple message types:
- * - 'text': Streaming text messages
- * - 'tool_call': Agent thinking indicator
- * - 'ui_actions': Dynamic UI components via GenUIRouter
- * - 'error': Error messages
+ * Accepts ReactNode[] messages from the AI provider pattern.
  *
  * User messages are right-aligned with blue background.
- * Assistant messages are left-aligned with zinc background.
+ * Assistant messages are left-aligned with zinc background and proper dark mode support.
  *
  * @example
  * ```tsx
- * const chatStream = useChatStream({ threadId, userId, token });
- * return <ChatCanvas chatStream={chatStream} />;
+ * const messages = [
+ *   { id: '1', role: 'user', display: <div>Hello</div> },
+ *   { id: '2', role: 'assistant', display: <div>Hi there!</div> }
+ * ];
+ * return <ChatCanvas messages={messages} />;
  * ```
  */
-export function ChatCanvas({ chatStream }: ChatCanvasProps) {
-  const { messages } = chatStream;
+export function ChatCanvas({ messages, isLoading }: ChatCanvasProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
+
+  // Show empty state if no messages
+  if (messages.length === 0) {
+    return <EmptyState onSend={() => {}} />;
+  }
 
   // Virtualizer for efficient rendering of large message lists
   const virtualizer = useVirtualizer({
@@ -86,9 +69,10 @@ export function ChatCanvas({ chatStream }: ChatCanvasProps) {
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: (i) => {
       const msg = messages[i];
-      if (msg.type === 'ui_actions') return 350;
-      if (msg.role === 'user') return 60;
-      return 100;
+      // Check what type of component is being rendered
+      if (typeof msg.display === 'string') return 80;
+      // Could check for specific component types here
+      return 100; // Default
     },
     measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 5,
@@ -113,39 +97,16 @@ export function ChatCanvas({ chatStream }: ChatCanvasProps) {
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     const shouldScroll = lastMessage?.role === 'user' || isNearBottom.current;
-    
+
     if (shouldScroll && anchorRef.current) {
       anchorRef.current.scrollIntoView({ block: 'end', behavior: 'instant' });
     }
   }, [messages.length]);
 
-  /**
-   * Renders a single message row based on message type
-   */
-  function MessageRow({ message }: { message: ChatMessage }) {
-    switch (message.type) {
-      case 'text':
-        return (
-          <StreamingMessage
-            content={message.content}
-            isStreaming={!!message.isStreaming}
-          />
-        );
-      case 'tool_call':
-        return <AgentThinking toolName={message.toolName} />;
-      case 'ui_actions':
-        return <GenUIRouter actions={message.uiActions!} />;
-      case 'error':
-        return <ErrorCard message={message.content} />;
-      default:
-        return null;
-    }
-  }
-
   return (
     <div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto scroll-smooth bg-white dark:bg-gray-950 px-4 md:px-0"
+      className="chat-canvas flex-1 overflow-y-auto scroll-smooth bg-white dark:bg-gray-950 px-4 md:px-0 scrollbar-thin scrollbar-thin-dark"
       role="log"
       aria-label="Chat messages"
       aria-live="polite"
@@ -178,21 +139,15 @@ export function ChatCanvas({ chatStream }: ChatCanvasProps) {
 
                 {/* Message Content */}
                 <div className={`max-w-[85%] ${isUser ? '' : 'flex-1'}`}>
-                  {msg.type === 'ui_actions' ? (
-                    <div className="w-full">
-                      <MessageRow message={msg} />
-                    </div>
-                  ) : (
-                    <div
-                      className={`p-4 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
-                        isUser
-                          ? 'bg-indigo-600 text-white rounded-tr-none'
-                          : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300 rounded-tl-none'
-                      }`}
-                    >
-                      <MessageRow message={msg} />
-                    </div>
-                  )}
+                  <div
+                    className={`p-4 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
+                      isUser
+                        ? 'bg-indigo-600 text-white rounded-tr-none'
+                        : 'bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-zinc-900 dark:text-zinc-100 rounded-tl-none'
+                    }`}
+                  >
+                    {msg.display}
+                  </div>
                 </div>
               </div>
             </div>

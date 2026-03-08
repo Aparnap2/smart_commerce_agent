@@ -25,17 +25,21 @@ interface Props {
  */
 export function StreamingMessage({ content, isStreaming }: Props) {
   const [displayed, setDisplayed] = useState(content);
-  const [startTransition] = useTransition();
+  const startTransition = useTransition();
 
   useEffect(() => {
-    startTransition(() => {
+    if (typeof startTransition === 'function') {
+      startTransition(() => {
+        setDisplayed(content);
+      });
+    } else {
       setDisplayed(content);
-    });
-  }, [content, startTransition]);
+    }
+  }, [content]);
 
   return (
     <p
-      className="text-sm leading-relaxed whitespace-pre-wrap break-words"
+      className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100"
       aria-live="polite"
       aria-atomic="false"
     >

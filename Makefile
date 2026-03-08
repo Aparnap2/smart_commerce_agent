@@ -4,7 +4,11 @@
         dev-web dev-api dev-agent \
         test-web test-api test-agent \
         db-migrate db-seed db-reset db-studio \
-        health clean prune
+        health clean prune \
+        start-postgres stop-postgres test-postgres health-postgres \
+        start-redis stop-redis test-redis health-redis \
+        start-langfuse stop-langfuse test-langfuse health-langfuse \
+        test-all-sequential health-all-sequential clean-all
 
 # ── Agent briefing ───────────────────────────────────────────
 agent-briefing:
@@ -170,3 +174,93 @@ clean: prune
 	  -exec rm -rf {} + 2>/dev/null; true
 	find . -name ".next" -type d \
 	  -exec rm -rf {} + 2>/dev/null; true
+
+# ─── Individual Container Management ───────────────────────────
+
+# PostgreSQL
+start-postgres:
+	./scripts/start-postgres.sh
+
+stop-postgres:
+	./scripts/stop-postgres.sh
+
+test-postgres: start-postgres
+	@echo "📊 Testing PostgreSQL..."
+	docker exec smart-commerce-postgres psql -U postgres -d techtrend -c "SELECT version();"
+	docker exec smart-commerce-postgres psql -U postgres -d techtrend -c "\dt"
+	@echo "✅ PostgreSQL test complete"
+	@echo "🛑 Stopping PostgreSQL..."
+	./scripts/stop-postgres.sh
+
+# Redis
+start-redis:
+	./scripts/start-redis.sh
+
+stop-redis:
+	./scripts/stop-redis.sh
+
+test-redis: start-redis
+	@echo "📊 Testing Redis..."
+	docker exec smart-commerce-redis redis-cli ping
+	docker exec smart-commerce-redis redis-cli DBSIZE
+	@echo "✅ Redis test complete"
+	@echo "🛑 Stopping Redis..."
+	./scripts/stop-redis.sh
+
+# Langfuse (requires PostgreSQL)
+start-langfuse:
+	@echo "⚠️  Langfuse requires PostgreSQL. Starting postgres first..."
+	./scripts/start-postgres.sh
+	docker exec smart-commerce-postgres psql -U postgres -c "CREATE DATABASE langfuse;" 2>/dev/null || echo "Database already exists"
+	@echo "⚠️  Keeping PostgreSQL running for Langfuse..."
+	./scripts/start-langfuse.sh
+
+stop-langfuse:
+	./scripts/stop-langfuse.sh
+
+test-langfuse: start-langfuse
+	@echo "📊 Testing Langfuse..."
+	curl -sf http://localhost:3001/api/public/health && echo "✅ Langfuse healthy" || echo "❌ Langfuse unhealthy"
+	@echo "✅ Langfuse test complete"
+	@echo "🛑 Stopping Langfuse..."
+	./scripts/stop-langfuse.sh
+
+# ─── Sequential Testing (One at a Time) ────────────────────────
+
+test-all-sequential:
+	@echo "\n🧪 SEQUENTIAL CONTAINER TESTING"
+	@echo "================================"
+	@echo "Testing each container ONE at a time (no parallel execution)"
+	@echo ""
+	@$(MAKE) test-postgres
+	@echo ""
+	@$(MAKE) test-redis
+	@echo ""
+	@$(MAKE) test-langfuse
+	@echo "\n✅ ALL CONTAINERS TESTED SEQUENTIALLY"
+
+# ─── Cleanup ───────────────────────────────────────────────────
+
+clean-all:
+	@echo "🧹 Cleaning all containers..."
+	./scripts/stop-postgres.sh 2>/dev/null || true
+	./scripts/stop-redis.sh 2>/dev/null || true
+	./scripts/stop-langfuse.sh 2>/dev/null || true
+	@echo "✅ All containers stopped and removed"
+
+# ─── Health Check (Individual) ─────────────────────────────────
+
+health-postgres:
+	@echo "Postgres:" && docker exec smart-commerce-postgres pg_isready -U postgres 2>/dev/null || echo "❌ Not running"
+
+health-redis:
+	@echo "Redis:" && docker exec smart-commerce-redis redis-cli ping 2>/dev/null || echo "❌ Not running"
+
+health-langfuse:
+	@echo "Langfuse:" && curl -sf http://localhost:3001/api/public/health 2>/dev/null && echo "✅" || echo "❌ Not running"
+
+health-all-sequential:
+	@echo "=== Individual Container Health ==="
+	@$(MAKE) health-postgres
+	@$(MAKE) health-redis
+	@$(MAKE) health-langfuse

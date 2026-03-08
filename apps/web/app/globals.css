@@ -24,3 +24,179 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ============================================
+   Shell Layout - Main application container
+   ============================================ */
+.shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100dvh;
+  min-height: 100vh; /* Fallback for browsers without dvh support */
+  overflow: hidden;
+}
+
+/* Tablet: Collapsed rail (64px) */
+@media (max-width: 1279px) {
+  .shell {
+    grid-template-columns: 64px 1fr;
+  }
+}
+
+/* Mobile: Full width, rail hidden */
+@media (max-width: 767px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================
+   Rail (Sidebar) - Navigation panel
+   ============================================ */
+.rail {
+  width: 260px;
+  border-right: 1px solid rgb(229 231 235);
+  background-color: rgb(255 255 255);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rail-dark {
+  border-right-color: rgb(31 41 55);
+  background-color: rgb(17 24 39);
+}
+
+/* Tablet: Collapsed rail */
+@media (max-width: 1279px) {
+  .rail {
+    width: 64px;
+  }
+}
+
+/* Mobile: Hidden rail */
+@media (max-width: 767px) {
+  .rail {
+    display: none;
+  }
+}
+
+/* ============================================
+   Header - Sticky top navigation
+   ============================================ */
+.header {
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid rgb(229 231 235);
+  background-color: rgb(255 255 255 / 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.header-dark {
+  border-bottom-color: rgb(31 41 55);
+  background-color: rgb(17 24 39 / 0.8);
+}
+
+/* ============================================
+   ChatCanvas - Scrollable message area
+   ============================================ */
+.chat-canvas {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================
+   InputBar - Sticky bottom input
+   ============================================ */
+.input-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  border-top: 1px solid rgb(229 231 235);
+  background-color: rgb(255 255 255);
+}
+
+.input-bar-dark {
+  border-top-color: rgb(31 41 55);
+  background-color: rgb(17 24 39);
+}
+
+/* ============================================
+   Scrollbar Utilities
+   ============================================ */
+
+/* Hide scrollbar for horizontal scroll */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom scrollbar for vertical scroll */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(209 213 219) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(209 213 219);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(156 163 175);
+}
+
+/* Dark mode scrollbar */
+.scrollbar-thin-dark {
+  scrollbar-color: rgb(75 85 99) transparent;
+}
+
+.scrollbar-thin-dark::-webkit-scrollbar-thumb {
+  background-color: rgb(75 85 99);
+}
+
+.scrollbar-thin-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+/* Prevent text selection on UI elements */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Focus visible for accessibility */
+.focus-visible-ring:focus-visible {
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: 2px;
+}

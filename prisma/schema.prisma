@@ -9,197 +9,214 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// User embedding for preference history and semantic search
-/// Stores 384-dimensional vectors generated from user queries
-model UserEmbedding {
-  id          String                @id @default(uuid())
-  userId      String                @map("user_id")
-  embedding   Unsupported("vector") @map("embedding")
-  queryText   String                @map("query_text")
-  contextType String                @map("context_type")
-  contextId   String?               @map("context_id")
-  metadata    Json?                 @default("{}")
-  createdAt   DateTime              @default(now()) @map("created_at")
-  updatedAt   DateTime              @updatedAt @map("updated_at")
+// ============================================================================
+// ENUMS
+// ============================================================================
 
-  @@unique([userId, queryText, contextType, contextId])
-  @@map("user_embeddings")
+/// User roles for RBAC
+enum Role {
+  CUSTOMER
+  MERCHANT
+  ADMIN
 }
 
-model Customer {
-  id             Int             @id @default(autoincrement())
-  name           String?
-  email          String          @unique
-  phone          String?
-  address        String?
-  paymentMethod  String?
-  billingAddress String?
-  createdAt      DateTime        @default(now())
+/// Order status lifecycle
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+/// Return request options
+enum ReturnOption {
+  REPLACEMENT
+  REFUND
+  STORE_CREDIT
+}
+
+/// Commerce event types for proactive agent notifications
+enum CommerceEventType {
+  CART_ABANDONED
+  STOCK_LOW
+  PRICE_DROP
+  ORDER_CREATED
+  ORDER_SHIPPED
+  RETURN_REQUESTED
+}
+
+// ============================================================================
+// CORE MODELS
+// ============================================================================
+
+/// User model managed by NextAuth
+/// Supports both CUSTOMER and MERCHANT roles
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed password
+  role      Role     @default(CUSTOMER)
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  cart           Cart?
   orders         Order[]
-  supportTickets SupportTicket[]
+  returnRequests ReturnRequest[]
+  commerceEvents CommerceEvent[]
+  agentTraces    AgentTrace[]
+
+  @@map("users")
 }
 
+/// Product with semantic search embedding support
+/// Uses pgvector for 1536-dimensional vectors (text-embedding-3-small)
 model Product {
-  id          Int                @id @default(autoincrement())
+  id          String   @id @default(cuid())
   name        String
   description String?
-  price       Float
-  stock       Int
-  image       String?
-  category    String?
-  sku         String?
-  brand       String?
-  rating      Float?
+  price       Int      // Store in smallest currency unit (e.g., cents/paise)
+  category    String
+  stockCount  Int      @default(0)
+  embedding   Unsupported("vector(1536)")? // Semantic embedding for vector search
+  version     Int      @default(1) // Optimistic locking
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // Full-text search vector (tsvector) for keyword matching
-  // Populated via trigger on insert/update
-  searchVector Unsupported("tsvector")? @map("search_vector")
-
-  // Semantic embedding for vector similarity (1536-dim for text-embedding-3-small)
-  embedding    Unsupported("vector(1536)")? @map("embedding")
-
-  orders       Order[]
-  embeddings   ProductEmbedding[]
-  cartItems    CartItem[]  // Opposite relation for CartItem
-
-  @@index([searchVector], type: Gin, name: "product_search_idx")
-  // HNSW index will be created via raw SQL migration (Prisma doesn't support HNSW)
+  // Indexes for performance
+  @@index([embedding])
+  @@index([category])
+  @@index([stockCount])
+  @@map("products")
 }
 
-model Order {
-  id              Int          @id @default(autoincrement())
-  customerId      Int
-  productId       Int
-  orderDate       DateTime     @default(now())
-  total           Float
-  status          String
-  quantity        Int          @default(1)
-  paymentStatus   String?
-  shippingAddress String?
-  trackingNumber  String?
-  customer        Customer     @relation(fields: [customerId], references: [id])
-  product         Product      @relation(fields: [productId], references: [id])
-  orderRefund     OrderRefund?
-  refunds         Refund[]
-}
-
-model SupportTicket {
-  id             Int      @id @default(autoincrement())
-  customerId     Int
-  issue          String
-  status         String
-  createdAt      DateTime @default(now())
-  priority       String?
-  relatedOrderId Int?
-  resolution     String?
-  customer       Customer @relation(fields: [customerId], references: [id])
-}
-
-/// Refund record for tracking Stripe refunds
-model Refund {
-  id              Int      @id @default(autoincrement())
-  stripeRefundId  String   @unique @map("stripe_refund_id")
-  paymentIntentId String   @map("payment_intent_id")
-  orderId         Int?     @map("order_id")
-  customerEmail   String?  @map("customer_email")
-  amount          Int
-  currency        String   @default("usd")
-  status          String
-  reason          String?
-  idempotencyKey  String?  @map("idempotency_key")
-  metadata        Json?    @default("{}")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  order           Order?   @relation(fields: [orderId], references: [id])
-
-  @@index([paymentIntentId])
-  @@index([orderId])
-  @@index([status])
-  @@map("refunds")
-}
-
-/// Webhook event tracking for idempotency
-model WebhookEvent {
-  id          String   @id @default(uuid())
-  eventId     String   @unique @map("event_id")
-  eventType   String   @map("event_type")
-  processedAt DateTime @default(now()) @map("processed_at")
-  data        Json?    @default("{}")
-
-  @@index([eventId])
-  @@index([eventType])
-  @@map("webhook_events")
-}
-
-/// Order refund status tracking
-model OrderRefund {
-  id             Int      @id @default(autoincrement())
-  orderId        Int      @unique @map("order_id")
-  refundStatus   String   @default("none") @map("refund_status")
-  refundedAmount Int      @default(0) @map("refund_amount")
-  lastRefundId   String?  @map("last_refund_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  order          Order    @relation(fields: [orderId], references: [id])
-
-  @@map("order_refunds")
-}
-
-/// Shopping Cart
+/// Shopping Cart (per-user, single active cart)
+/// Uses JSONB for items to avoid N+1 queries on cart retrieval
 model Cart {
-  id          String     @id @default(uuid())
-  customerId  String    @map("customer_id")
-  items       CartItem[]
-  couponCode  String?   @map("coupon_code")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  
-  @@unique([customerId])
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id") // One cart per user
+  items     Json     @default("[]") // Array of {productId, quantity, price}
+  total     Int      @default(0) // Total in smallest currency unit
+  version   Int      @default(1) // Optimistic locking
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("carts")
 }
 
-/// Cart Item
-model CartItem {
-  id         String   @id @default(uuid())
-  cartId     String   @map("cart_id")
-  productId  Int      @map("product_id")
-  quantity   Int      @default(1)
-  price      Float    // Price at time of adding to cart
-  product    Product  @relation(fields: [productId], references: [id])
-  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  
-  @@unique([cartId, productId])
-  @@map("cart_items")
+/// Order (immutable after creation)
+/// Tracks complete purchase transactions
+model Order {
+  id               String      @id @default(cuid())
+  userId           String      @map("user_id")
+  status           OrderStatus @default(PENDING)
+  stripePaymentIntent String?  @map("stripe_payment_intent_id")
+  items            Json        @default("[]") // Snapshot of items at purchase time
+  total            Int         // Total in smallest currency unit
+  trackingNumber   String?     @map("tracking_number")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  returnRequests ReturnRequest[]
+
+  // Indexes for performance
+  @@index([userId, status])
+  @@index([stripePaymentIntent])
+  @@index([status])
+  @@map("orders")
 }
 
-/// Coupon/Promo code
-model Coupon {
-  id              Int       @id @default(autoincrement())
-  code            String    @unique
-  discountType    String    @map("discount_type") // 'percentage' | 'fixed'
-  discountValue   Float     @map("discount_value")
-  minOrderAmount  Float?    @map("min_order_amount")
-  expiresAt       DateTime? @map("expires_at")
-  isActive       Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  
-  @@map("coupons")
+/// Return Request (agentic returns flow)
+/// Manages conversational return/refund process
+model ReturnRequest {
+  id           String       @id @default(cuid())
+  orderId      String       @map("order_id")
+  userId       String       @map("user_id")
+  reason       String
+  policy       Json         @default("{}") // Return policy snapshot at time of request
+  chosenOption ReturnOption @map("chosen_option")
+  stripeRefundId String?    @map("stripe_refund_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([orderId])
+  @@index([userId])
+  @@index([stripeRefundId])
+  @@map("return_requests")
 }
 
-/// Product knowledge embeddings for semantic search
-/// Uses 768-dimensional vectors from nomic-embed-text
+/// Commerce Event (events layer for proactive agent notifications)
+/// Tracks events like cart abandonment, stock alerts, price drops
+model CommerceEvent {
+  id          String            @id @default(cuid())
+  type        CommerceEventType
+  userId      String?           @map("user_id")
+  payload     Json              @default("{}") // Event-specific data
+  processed   Boolean           @default(false)
+  processedAt DateTime?         @map("processed_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Indexes for efficient polling
+  @@index([processed, createdAt])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("commerce_events")
+}
+
+/// Agent Trace (audit trail for all agent tool executions)
+/// Provides observability and debugging for agent actions
+model AgentTrace {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  sessionId  String   @map("session_id")
+  toolName   String   @map("tool_name")
+  input      Json     @default("{}") // Tool input parameters
+  output     Json     @default("{}") // Tool execution result
+  latencyMs  Int      @map("latency_ms") // Execution time in milliseconds
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes for querying traces
+  @@index([userId, createdAt])
+  @@index([sessionId])
+  @@index([toolName])
+  @@map("agent_traces")
+}
+
+// ============================================================================
+// LEGACY/HELPER MODELS (Keep existing for backward compatibility)
+// ============================================================================
+
+/// Product embedding for semantic search (legacy, kept for migration)
 model ProductEmbedding {
   id             String                @id @default(uuid())
-  productId      Int                   @map("product_id")
+  productId      String                @map("product_id")
   embedding      Unsupported("vector") @map("embedding")
   embeddingModel String                @default("nomic-embed-text") @map("embedding_model")
   createdAt      DateTime              @default(now()) @map("created_at")
-  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("product_embeddings")
 }
 
-/// Knowledge base document for RAG
+/// Document chunks for RAG (kept for existing functionality)
 model Document {
   id        String          @id @default(uuid())
   title     String
@@ -225,41 +242,22 @@ model DocumentChunk {
   tokenCount Int?                  @map("token_count")
   metadata   Json?                 @default("{}")
   createdAt  DateTime?             @default(now()) @map("created_at")
-  document   Document              @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  document   Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
   @@map("document_chunks")
 }
-enum Role {
-  SHOPPER
-  MERCHANT
-  SUPPORT
-  ADMIN
-}
 
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(SHOPPER)
-  name         String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+/// Webhook event tracking for idempotency
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique @map("event_id")
+  eventType   String   @map("event_type")
+  processedAt DateTime @default(now()) @map("processed_at")
+  data        Json?    @default("{}")
 
-  @@map("users")
-}
-
-/// Agent notification for price alerts, status updates, etc.
-model AgentNotification {
-  id         String    @id @default(cuid())
-  customerId String    @map("customer_id")
-  type       String
-  payload    String
-  read       Boolean   @default(false)
-  expiresAt  DateTime? @map("expires_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-
-  @@index([customerId, read])
-  @@map("agent_notifications")
+  @@index([eventId])
+  @@index([eventType])
+  @@map("webhook_events")
 }

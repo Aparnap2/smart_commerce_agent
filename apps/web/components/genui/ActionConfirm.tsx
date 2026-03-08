@@ -140,7 +140,11 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
 
   return (
     <div
-      className={`bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden ${className}`}
+      className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border-2 ${
+        isDanger && state !== 'success'
+          ? 'border-red-300 dark:border-red-700'
+          : 'border-gray-200 dark:border-gray-700'
+      } ${className}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="action-confirm-title"

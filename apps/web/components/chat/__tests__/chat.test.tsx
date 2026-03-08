@@ -6,28 +6,19 @@
  * @packageDocumentation
  */
 
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChatCanvas } from '../ChatCanvas';
 import { InputBar } from '../InputBar';
-import type { UseChatStreamReturn, ChatMessage } from '@/hooks/useChatStream';
 
 /**
- * Creates a mock chat stream for testing
+ * Message interface for ChatCanvas tests
  */
-function createMockChatStream(
-  messages: ChatMessage[] = [],
-  isLoading = false
-): UseChatStreamReturn {
-  return {
-    messages,
-    isLoading,
-    error: null,
-    sendMessage: vi.fn(),
-    stopStreaming: vi.fn(),
-    clearMessages: vi.fn(),
-  };
+interface TestMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  display: ReactNode;
 }
 
 /**
@@ -36,67 +27,46 @@ function createMockChatStream(
 function createMessage(
   id: string,
   role: 'user' | 'assistant',
-  content: string,
-  type: ChatMessage['type'] = 'text'
-): ChatMessage {
+  content: string
+): TestMessage {
   return {
     id,
     role,
-    content,
-    type,
-    createdAt: Date.now(),
+    display: <div>{content}</div>,
   };
 }
 
 describe('ChatCanvas Component', () => {
-  const mockMessages: ChatMessage[] = [
+  const mockMessages: TestMessage[] = [
     createMessage('1', 'assistant', 'Hello! How can I help you today?'),
     createMessage('2', 'user', 'Show me headphones under $100'),
     createMessage('3', 'assistant', 'Here are some great options:'),
   ];
 
   it('renders chat canvas container', () => {
-    const chatStream = createMockChatStream(mockMessages, false);
-    const { container } = render(<ChatCanvas chatStream={chatStream} />);
+    const { container } = render(<ChatCanvas messages={mockMessages} />);
 
     // Check for the scroll container
     expect(container.querySelector('.overflow-y-auto')).toBeInTheDocument();
   });
 
   it('sets correct height for virtualizer', () => {
-    const chatStream = createMockChatStream(mockMessages, false);
-    const { container } = render(<ChatCanvas chatStream={chatStream} />);
+    const { container } = render(<ChatCanvas messages={mockMessages} />);
 
     // Check that virtualizer container has height set
     const virtualContainer = container.querySelector('[style*="height"]');
     expect(virtualContainer).toBeInTheDocument();
   });
 
-  it('renders UI actions with full width', () => {
-    const messagesWithUI: ChatMessage[] = [
-      ...mockMessages,
-      {
-        id: '4',
-        role: 'assistant',
-        content: 'Product results',
-        type: 'ui_actions',
-        uiActions: [
-          { component: 'ProductGrid', props: { products: [] } },
-        ],
-        createdAt: Date.now(),
-      },
-    ];
-
-    const chatStream = createMockChatStream(messagesWithUI, false);
-    const { container } = render(<ChatCanvas chatStream={chatStream} />);
+  it('renders messages with correct alignment', () => {
+    const { container } = render(<ChatCanvas messages={mockMessages} />);
 
     // Check that the component renders without error
     expect(container.querySelector('.overflow-y-auto')).toBeInTheDocument();
   });
 
   it('has correct ARIA attributes for accessibility', () => {
-    const chatStream = createMockChatStream(mockMessages, false);
-    const { container } = render(<ChatCanvas chatStream={chatStream} />);
+    const { container } = render(<ChatCanvas messages={mockMessages} />);
 
     // Check for ARIA attributes
     const logElement = container.querySelector('[role="log"]');

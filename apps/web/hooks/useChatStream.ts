@@ -172,6 +172,13 @@ export function useChatStream({
     async (content: string): Promise<void> => {
       if (!content.trim()) return;
 
+      // CRITICAL: Abort any in-flight stream before starting new one
+      // This prevents race conditions when user sends multiple messages quickly
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+
       // Clear any previous error
       setError(null);
 
@@ -203,6 +210,7 @@ export function useChatStream({
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
+            'x-user-id': userId,
           },
           body: JSON.stringify({
             threadId,

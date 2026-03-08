@@ -1,22 +1,27 @@
-# Smart Commerce Agent — Coding Agent Instructions
+# CLAUDE.md — Smart Commerce Agent
 
 ## ⚡ MANDATORY: Do This FIRST, Every Single Session
 
 Before writing ANY code, run these commands and read their output:
 
 ```bash
-# 1. What's actually running?
+# 1. What's actually running? (Sequential: one container at a time)
 docker ps -a
 
 # 2. What's the current state of the DB?
-docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce \
+make start-postgres
+docker exec smart-commerce-postgres psql -U postgres techtrend \
   -c "\dt" -c "SELECT COUNT(*) FROM \"Product\";"
+make stop-postgres
 
 # 3. Any failing tests right now?
 pnpm test --passWithNoTests 2>&1 | tail -20
 
 # 4. What's in .env.local (without secrets)?
 grep -v "KEY\|SECRET\|TOKEN\|PASSWORD" .env.local
+
+# 5. Read the definitive feature list
+cat FEATURES.md
 ```
 
 **Report what you find BEFORE proposing any plan.**
@@ -25,14 +30,14 @@ grep -v "KEY\|SECRET\|TOKEN\|PASSWORD" .env.local
 
 ## 🗺️ Context: What This Project Is
 
+**See @FEATURES.md for the DEFINITIVE feature list (what to build, what NOT to build).**
 See @AGENTS.md for full architecture context.
 See @TASKS.md for current phase, active task, and what's done.
 
 This is a **production-grade agentic e-commerce platform**:
-- Next.js 15 frontend + CopilotKit AI sidebar
+- Next.js 15 frontend + Vercel AI SDK RSC (`streamUI`)
 - LangGraph supervisor agent with typed state
 - MCP tool layer (Zod-validated, user-scoped, idempotent)
-- Stripe MCP Agent Toolkit for all payments
 - PostgreSQL + pgvector hybrid search (FTS + HNSW rerank)
 - Azure AI Foundry LLM (already configured in .env.local)
 - Redis (LangGraph checkpoints + semantic cache)
@@ -99,11 +104,15 @@ Red → Green → Refactor. Always.
 pnpm test [test-file] --watch
 
 # If it touches the DB, check real data
-docker exec smart-commerce-postgres-1 psql -U postgres smart_commerce \
+make start-postgres
+docker exec smart-commerce-postgres psql -U postgres techtrend \
   -c "SELECT * FROM \"[Table]\" LIMIT 5;"
+make stop-postgres
 
 # If it touches Redis
-docker exec smart-commerce-redis-1 redis-cli keys "*"
+make start-redis
+docker exec smart-commerce-redis redis-cli keys "*"
+make stop-redis
 
 # If it touches LangGraph / LLM — use REAL Azure AI Foundry
 # NEVER mock the LLM in integration tests
@@ -129,6 +138,7 @@ After completing any task:
 - Never use Ollama — LLM is Azure AI Foundry
 - Never use UCP Protocol — use Stripe MCP for payments
 - Never disable LangGraph — it must be active
+- **Never build features outside FEATURES.md — strict boundary**
 
 ---
 

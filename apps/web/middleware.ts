@@ -11,16 +11,24 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Routes that require authentication
 const PROTECTED_PAGES = ['/dashboard', '/settings', '/profile'];
 const PROTECTED_API = ['/api/protected'];
+// Public API routes (no auth required) - for demo/testing
+const PUBLIC_API = ['/api/agent'];
 
 /**
  * Middleware handler
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
+
+  // Allow public API routes without auth
+  const isPublicApi = PUBLIC_API.some(p => pathname.startsWith(p));
+  if (isPublicApi) {
+    return NextResponse.next();
+  }
+
   const isPage = PROTECTED_PAGES.some(p => pathname.startsWith(p));
   const isApi = PROTECTED_API.some(p => pathname.startsWith(p));
-  
+
   if (!isPage && !isApi) {
     return NextResponse.next();
   }

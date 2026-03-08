@@ -12,8 +12,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-import { CopilotKit } from "@copilotkit/react-core";
-import "@copilotkit/react-ui/styles.css";
 import { QueryProvider } from "@/components/query-provider";
 
 export const metadata = {
@@ -33,9 +31,7 @@ export default function RootLayout({ children }) {
       >
         <AuthProvider>
           <QueryProvider>
-            <CopilotKit runtimeUrl="/api/copilotkit">
-              {children}
-            </CopilotKit>
+            {children}
           </QueryProvider>
         </AuthProvider>
       </body>

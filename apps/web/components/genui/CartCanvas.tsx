@@ -37,6 +37,8 @@ export interface CartCanvasProps {
   onApplyCoupon?: (code: string) => void;
   isLoading?: boolean;
   className?: string;
+  /** Compact summary for AIState (~50 tokens) */
+  summary?: string;
 }
 
 interface CouponState {
@@ -54,6 +56,7 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
   onApplyCoupon,
   isLoading = false,
   className = '',
+  summary,
 }) => {
   const [coupon, setCoupon] = useState<CouponState>({
     code: '',

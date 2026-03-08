@@ -1,5 +1,5 @@
 // app/actions.js
-import { generateObject, streamObject, streamText } from 'ai';
+import { generateObject, streamObject, streamText, stepCountIs } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 
@@ -99,7 +99,7 @@ export async function streamAgentResponse(messages, options = {}) {
 
   const {
     model = google('gemini-1.5-flash'),
-    maxSteps = 5,
+    maxSteps = 5, // CRITICAL: Prevent infinite tool call loops. Hard limit of 5 tool calls per turn.
     onStepComplete = null,
     includeUI = true,
   } = options;
@@ -108,7 +108,7 @@ export async function streamAgentResponse(messages, options = {}) {
     const result = await streamText({
       model,
       messages,
-      maxSteps,
+      stopWhen: stepCountIs(maxSteps),
       tools: {
         // Database query tool
         db_query: {

@@ -40,6 +40,8 @@ export interface OrderCardProps {
   onReorder?: (orderId: string) => void;
   isLoading?: boolean;
   className?: string;
+  /** Compact summary for AIState (~60 tokens) */
+  summary?: string;
 }
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bgColor: string }> = {
@@ -65,6 +67,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   onReorder,
   isLoading = false,
   className = '',
+  summary,
 }) => {
   const statusConfig = STATUS_CONFIG[status];
   const isCancelled = status === 'CANCELLED';

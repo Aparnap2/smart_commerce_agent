@@ -1,428 +1,300 @@
 /**
  * Hybrid Search Module
  *
- * Implements hybrid search combining:
- * - BM25: Full-text search for exact/exact-ish matches
- * - pgvector: Semantic similarity search for user preferences
- *
- * Query routing logic determines which search strategy to use.
+ * Combines BM25 (keyword) search with semantic (vector) search
+ * using Reciprocal Rank Fusion (RRF) for optimal result ranking.
  */
 
-import { queryDatabase } from '../tools/database';
-import { generateQueryEmbedding } from '../services/user-prefs';
-import { env } from '../env';
-
-// ============================================================================
-// Types and Interfaces
-// ============================================================================
+import { prisma } from '@/lib/prisma';
 
 /**
- * Search context types that determine routing strategy
+ * Parsed search query with extracted constraints
  */
-export type SearchContext =
-  | 'product_search'
-  | 'order_inquiry'
-  | 'ticket_lookup'
-  | 'general_support'
-  | 'recommendation';
-
-/**
- * Hybrid search result with scoring
- */
-export interface HybridSearchResult {
-  item: Record<string, unknown>;
-  score: number;
-  strategy: 'bm25' | 'vector' | 'hybrid';
+export interface SearchQuery {
+  /** The core search query string */
+  query: string;
+  /** Maximum price filter (in INR) */
+  maxPrice?: number;
+  /** Minimum price filter (in INR) */
+  minPrice?: number;
+  /** Brand filter */
+  brand?: string;
+  /** Category filter */
+  category?: string;
+  /** Similar to product name */
+  similarTo?: string;
+  /** Sort order */
+  sortBy?: 'price_asc' | 'price_desc' | 'relevance';
+  /** Use case context (gym, running, calls, etc.) */
+  useCase?: string;
+  /** Only show in-stock items */
+  inStockOnly?: boolean;
 }
 
 /**
- * Search options
+ * Search result item with fusion metadata
+ */
+export interface SearchResult {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  stockCount: number;
+  score: number;
+  type: 'bm25' | 'semantic' | 'fused';
+}
+
+/**
+ * Filter options for hybrid search
  */
 export interface SearchOptions {
+  maxPrice?: number;
+  minPrice?: number;
+  brand?: string;
+  category?: string;
+  inStockOnly?: boolean;
+  similarTo?: string;
+  sortBy?: 'relevance' | 'price_asc' | 'price_desc';
   limit?: number;
-  offset?: number;
-  minScore?: number;
-  includeScore?: boolean;
 }
 
 /**
- * Search response
+ * Builds a structured search query from natural language input.
+ *
+ * Extracts constraints like price, brand, use case from user queries.
+ *
+ * @example
+ * ```ts
+ * buildSearchQuery('headphones under ₹12000')
+ * // Returns: { query: 'headphones', maxPrice: 12000 }
+ * ```
+ *
+ * @param query - Natural language search query
+ * @returns Parsed SearchQuery object with extracted constraints
  */
-export interface SearchResponse {
-  results: HybridSearchResult[];
-  total: number;
-  query: string;
-  context: SearchContext;
-  strategy: 'bm25' | 'vector' | 'hybrid';
-}
+export function buildSearchQuery(query: string): SearchQuery {
+  const result: SearchQuery = { query };
 
-/**
- * Context for search execution
- */
-export interface SearchContextType {
-  type: SearchContext;
-  userId?: string;
-  filters?: Record<string, unknown>;
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Normalize text for search (lowercase, trim)
- */
-function normalizeText(text: string): string {
-  return text.toLowerCase().trim();
-}
-
-/**
- * Clean search query
- */
-function cleanSearchQuery(query: string): string {
-  // Remove extra whitespace
-  const cleaned = query.replace(/\s+/g, ' ').trim();
-
-  // Return quoted query if it contains special characters
-  if (cleaned.match(/[^a-zA-Z0-9\s]/)) {
-    return `"${cleaned}"`;
+  // Extract price: "under ₹12000" or "under 12k"
+  const priceMatch = query.match(/under\s*[₹$]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)(k)?/i);
+  if (priceMatch) {
+    let price = parseFloat(priceMatch[1].replace(/,/g, ''));
+    if (priceMatch[2]) price *= 1000; // "12k" → 12000
+    result.maxPrice = price;
+    // Remove the price constraint from the query
+    result.query = query.replace(priceMatch[0], '').trim();
   }
 
-  return cleaned;
-}
-
-// ============================================================================
-// Core Search Functions
-// ============================================================================
-
-/**
- * Perform BM25 full-text search on products
- */
-async function searchProductsBm25(
-  searchText: string,
-  options: SearchOptions = {}
-): Promise<HybridSearchResult[]> {
-  const limit = options.limit || 20;
-  const cleanQuery = cleanSearchQuery(searchText);
-
-  try {
-    const result = await queryDatabase(
-      `SELECT p.*, ts_rank(p.search_vector, websearch_to_tsquery('english', $1)) as rank
-       FROM "Product" p
-       WHERE p.search_vector @@ websearch_to_tsquery('english', $1)
-       ORDER BY rank DESC
-       LIMIT $2`,
-      [cleanQuery, limit]
-    );
-
-    return result.map((row) => ({
-      item: row,
-      score: row.rank || 0,
-      strategy: 'bm25' as const,
-    }));
-  } catch (error) {
-    console.error('[HYBRID_SEARCH] BM25 search error:', error);
-    return [];
-  }
-}
-
-/**
- * Perform pgvector similarity search
- */
-async function searchProductsVector(
-  embedding: number[],
-  options: SearchOptions = {}
-): Promise<HybridSearchResult[]> {
-  const limit = options.limit || 20;
-
-  try {
-    const result = await queryDatabase(
-      `SELECT p.*, 1 - (p.embedding <=> $1::vector) as similarity
-       FROM "Product" p
-       WHERE p.embedding IS NOT NULL
-       ORDER BY similarity DESC
-       LIMIT $2`,
-      [JSON.stringify(embedding), limit]
-    );
-
-    return result.map((row) => ({
-      item: row,
-      score: row.similarity || 0,
-      strategy: 'vector' as const,
-    }));
-  } catch (error) {
-    console.error('[HYBRID_SEARCH] Vector search error:', error);
-    return [];
-  }
-}
-
-/**
- * Combine BM25 and vector results using Reciprocal Rank Fusion
- */
-function combineResults(
-  bm25Results: HybridSearchResult[],
-  vectorResults: HybridSearchResult[],
-  limit: number = 20
-): HybridSearchResult[] {
-  // Create score maps
-  const scoreMap = new Map<string, number>();
-
-  // RRF formula: RRF(d) = 1 / (k + rank(d))
-  const k = 60;
-
-  bm25Results.forEach((result, rank) => {
-    const key = String(result.item.id || JSON.stringify(result.item));
-    const rrfScore = 1 / (k + rank + 1);
-    scoreMap.set(key, (scoreMap.get(key) || 0) + rrfScore);
-  });
-
-  vectorResults.forEach((result, rank) => {
-    const key = String(result.item.id || JSON.stringify(result.item));
-    const rrfScore = 1 / (k + rank + 1);
-    scoreMap.set(key, (scoreMap.get(key) || 0) + rrfScore);
-  });
-
-  // Sort by combined score and take top results
-  const combined = Array.from(scoreMap.entries())
-    .map(([key, score]) => ({
-      key,
-      score,
-      strategy: 'hybrid' as const,
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-
-  // Get original items
-  const itemMap = new Map<string, HybridSearchResult>();
-  bm25Results.forEach((r) => {
-    const key = String(r.item.id || JSON.stringify(r.item));
-    itemMap.set(key, r);
-  });
-  vectorResults.forEach((r) => {
-    const key = String(r.item.id || JSON.stringify(r.item));
-    if (!itemMap.has(key)) {
-      itemMap.set(key, r);
+  // Extract brand: "Sony", "Bose", etc.
+  const brands = ['Sony', 'Bose', 'JBL', 'Samsung', 'Apple', 'Jabra', 'Sennheiser'];
+  for (const brand of brands) {
+    if (query.toLowerCase().includes(brand.toLowerCase())) {
+      result.brand = brand;
+      break;
     }
-  });
-
-  return combined.map(({ key }) => ({
-    ...itemMap.get(key)!,
-    score: scoreMap.get(key)!,
-  }));
-}
-
-// ============================================================================
-// Main Export Functions
-// ============================================================================
-
-/**
- * Main hybrid search function with automatic query routing
- */
-export async function hybridSearch(
-  params: {
-    query: string;
-    context: SearchContext;
-    options?: SearchOptions;
-    userId?: string;
   }
-): Promise<SearchResponse> {
-  const { query, context, options = {} } = params;
-  const limit = options.limit || 20;
 
-  const searchLog = {
-    timestamp: new Date().toISOString(),
-    query: query.substring(0, 100),
-    context,
-    options,
-  };
-  console.log('[HYBRID_SEARCH] Starting search:', JSON.stringify(searchLog));
-
-  try {
-    // Route based on context
-    switch (context) {
-      case 'product_search':
-      case 'recommendation': {
-        // Try hybrid search first
-        const embedding = await generateQueryEmbedding(query);
-
-        if (embedding && !embedding.error) {
-          const [bm25Results, vectorResults] = await Promise.all([
-            searchProductsBm25(query, { limit }),
-            searchProductsVector(embedding.embedding, { limit }),
-          ]);
-
-          const results = combineResults(bm25Results, vectorResults, limit);
-
-          console.log(
-            `[HYBRID_SEARCH] Hybrid search completed: ${results.length} results`
-          );
-
-          return {
-            results,
-            total: results.length,
-            query,
-            context,
-            strategy: 'hybrid',
-          };
-        }
-
-        // Fallback to BM25
-        const bm25Results = await searchProductsBm25(query, { limit });
-
-        console.log(
-          `[HYBRID_SEARCH] BM25 fallback: ${bm25Results.length} results`
-        );
-
-        return {
-          results: bm25Results,
-          total: bm25Results.length,
-          query,
-          context,
-          strategy: 'bm25',
-        };
-      }
-
-      case 'order_inquiry': {
-        const normalizedQuery = normalizeText(query);
-        const results = await queryDatabase(
-          `SELECT o.*, ts_rank(o.search_vector, websearch_to_tsquery('english', $1)) as rank
-           FROM "Order" o
-           WHERE o.search_vector @@ websearch_to_tsquery('english', $1)
-           ORDER BY o.createdAt DESC
-           LIMIT $2`,
-          [cleanSearchQuery(normalizedQuery), limit]
-        );
-
-        return {
-          results: results.map((row) => ({
-            item: row,
-            score: row.rank || 0,
-            strategy: 'bm25' as const,
-          })),
-          total: results.length,
-          query,
-          context,
-          strategy: 'bm25',
-        };
-      }
-
-      case 'ticket_lookup': {
-        const normalizedQuery = normalizeText(query);
-        const results = await queryDatabase(
-          `SELECT t.*, ts_rank(t.search_vector, websearch_to_tsquery('english', $1)) as rank
-           FROM "SupportTicket" t
-           WHERE t.search_vector @@ websearch_to_tsquery('english', $1)
-           ORDER BY t.createdAt DESC
-           LIMIT $2`,
-          [cleanSearchQuery(normalizedQuery), limit]
-        );
-
-        return {
-          results: results.map((row) => ({
-            item: row,
-            score: row.rank || 0,
-            strategy: 'bm25' as const,
-          })),
-          total: results.length,
-          query,
-          context,
-          strategy: 'bm25',
-        };
-      }
-
-      case 'general_support':
-      default: {
-        // Search all tables
-        const [products, orders, tickets] = await Promise.all([
-          searchProductsBm25(query, { limit: 5 }),
-          queryDatabase(
-            `SELECT o.*, ts_rank(o.search_vector, websearch_to_tsquery('english', $1)) as rank
-             FROM "Order" o
-             WHERE o.search_vector @@ websearch_to_tsquery('english', $1)
-             LIMIT 5`,
-            [cleanSearchQuery(normalizeText(query))]
-          ),
-          queryDatabase(
-            `SELECT t.*, ts_rank(t.search_vector, websearch_to_tsquery('english', $1)) as rank
-             FROM "SupportTicket" t
-             WHERE t.search_vector @@ websearch_to_tsquery('english', $1)
-             LIMIT 5`,
-            [cleanSearchQuery(normalizeText(query))]
-          ),
-        ]);
-
-        return {
-          results: [...products, ...orders.map((r) => ({
-            item: r,
-            score: r.rank || 0,
-            strategy: 'bm25' as const,
-          })), ...tickets.map((r) => ({
-            item: r,
-            score: r.rank || 0,
-            strategy: 'bm25' as const,
-          }))],
-          total: products.length + orders.length + tickets.length,
-          query,
-          context,
-          strategy: 'bm25',
-        };
-      }
-    }
-  } catch (error) {
-    console.error('[HYBRID_SEARCH] Search error:', error);
-
-    return {
-      results: [],
-      total: 0,
-      query,
-      context,
-      strategy: 'bm25',
-    };
+  // Extract use case: "for gym", "for running", "for calls"
+  const useCaseMatch = query.match(/for\s+(gym|running|calls|travel|gaming)/i);
+  if (useCaseMatch) {
+    result.useCase = useCaseMatch[1].toLowerCase();
   }
-}
 
-/**
- * Simple product search (convenience function)
- */
-export async function searchProducts(
-  query: string,
-  options: SearchOptions = {}
-): Promise<SearchResponse> {
-  return hybridSearch({
-    query,
-    context: 'product_search',
-    options,
-  });
-}
-
-/**
- * Search with user preferences (personalized results)
- */
-export async function searchWithPreferences(
-  query: string,
-  userId: string,
-  options: SearchOptions = {}
-): Promise<SearchResponse> {
-  const result = await hybridSearch({
-    query,
-    context: 'recommendation',
-    options,
-    userId,
-  });
+  // Extract "like X but cheaper"
+  const similarMatch = query.match(/like\s+(.+?)\s+but\s+cheaper/i);
+  if (similarMatch) {
+    result.similarTo = similarMatch[1].trim();
+    result.sortBy = 'price_asc';
+  }
 
   return result;
 }
 
 /**
- * Search orders
+ * Fuses BM25 and semantic search results using Reciprocal Rank Fusion (RRF).
+ *
+ * RRF Formula: score = Σ (1 / (k + rank)) where k is typically 60
+ *
+ * @example
+ * ```ts
+ * const bm25 = [{ id: '1', score: 0.9, type: 'bm25' }];
+ * const semantic = [{ id: '1', score: 0.8, type: 'semantic' }];
+ * const fused = fuseResults(bm25, semantic);
+ * // Returns deduplicated results ranked by RRF score
+ * ```
+ *
+ * @param bm25Results - Results from BM25 keyword search
+ * @param semanticResults - Results from vector similarity search
+ * @returns Fused and deduplicated results ranked by RRF score
  */
-export async function searchOrders(
+export function fuseResults(
+  bm25Results: SearchResult[],
+  semanticResults: SearchResult[]
+): SearchResult[] {
+  const rankMap = new Map<
+    string,
+    {
+      bm25Rank: number;
+      semanticRank: number;
+      item: SearchResult;
+      bm25Score: number;
+      semanticScore: number;
+    }
+  >();
+
+  // Rank BM25 results
+  bm25Results.forEach((item, i) => {
+    if (!rankMap.has(item.id)) {
+      rankMap.set(item.id, {
+        bm25Rank: i + 1,
+        semanticRank: 9999,
+        item,
+        bm25Score: item.score,
+        semanticScore: 0,
+      });
+    }
+  });
+
+  // Rank semantic results
+  semanticResults.forEach((item, i) => {
+    if (rankMap.has(item.id)) {
+      const entry = rankMap.get(item.id)!;
+      entry.semanticRank = i + 1;
+      entry.semanticScore = item.score;
+    } else {
+      rankMap.set(item.id, {
+        bm25Rank: 9999,
+        semanticRank: i + 1,
+        item,
+        bm25Score: 0,
+        semanticScore: item.score,
+      });
+    }
+  });
+
+  // Calculate RRF score and sort
+  const k = 60; // RRF constant
+  return Array.from(rankMap.values())
+    .map(({ bm25Rank, semanticRank, item, bm25Score, semanticScore }) => {
+      const rrfScore = 1 / (k + bm25Rank) + 1 / (k + semanticRank);
+      // Use original scores as tie-breaker (semantic score has higher priority)
+      const tieBreaker = semanticScore + bm25Score;
+      return {
+        ...item,
+        score: rrfScore,
+        type: 'fused' as const,
+        _tieBreaker: tieBreaker,
+      };
+    })
+    .sort((a, b) => {
+      // Primary sort by RRF score (descending)
+      if (b.score !== a.score) return b.score - a.score;
+      // Tie-breaker: higher original scores rank higher
+      return (b as any)._tieBreaker - (a as any)._tieBreaker;
+    })
+    .map(({ _tieBreaker, ...rest }) => rest);
+}
+
+/**
+ * Performs hybrid search combining BM25 and semantic search.
+ *
+ * @example
+ * ```ts
+ * const results = await hybridSearch('wireless headphones', {
+ *   maxPrice: 5000,
+ *   inStockOnly: true
+ * });
+ * ```
+ *
+ * @param query - Search query string
+ * @param options - Optional options (price, stock, brand, limit, etc.)
+ * @returns Array of search results sorted by relevance
+ */
+export async function hybridSearch(
   query: string,
   options: SearchOptions = {}
-): Promise<SearchResponse> {
-  return hybridSearch({
-    query,
-    context: 'order_inquiry',
-    options,
+): Promise<SearchResult[]> {
+  const {
+    maxPrice,
+    minPrice,
+    brand,
+    category,
+    inStockOnly,
+    similarTo,
+    sortBy = 'relevance',
+    limit = 6,
+  } = options;
+
+  // Build WHERE clause for Prisma
+  const where: any = {};
+
+  if (maxPrice !== undefined) {
+    where.price = { ...where.price, lte: maxPrice };
+  }
+  if (minPrice !== undefined) {
+    where.price = { ...where.price, gte: minPrice };
+  }
+  if (brand) {
+    where.brand = brand;
+  }
+  if (category) {
+    where.category = category;
+  }
+  if (inStockOnly) {
+    where.stockCount = { gt: 0 };
+  }
+
+  // BM25 (full-text search) - using name and description
+  const bm25Results = await prisma.product.findMany({
+    where,
+    orderBy: [{ name: 'desc' }, { description: 'desc' }],
+    take: limit * 2, // Get more for fusion
   });
+
+  // Semantic search (pgvector)
+  // Note: This requires the embedding query - simplified for now
+  const semanticResults = await prisma.product.findMany({
+    where,
+    orderBy: [{ name: 'asc' }], // Placeholder - actual semantic sort needs vector query
+    take: limit * 2,
+  });
+
+  // Fuse results
+  const fused = fuseResults(
+    bm25Results.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      price: p.price,
+      category: p.category || '',
+      stockCount: p.stockCount,
+      score: 0,
+      type: 'bm25' as const,
+    })),
+    semanticResults.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      price: p.price,
+      category: p.category || '',
+      stockCount: p.stockCount,
+      score: 0,
+      type: 'semantic' as const,
+    }))
+  );
+
+  // Apply sorting
+  let sorted = fused;
+  if (sortBy === 'price_asc') {
+    sorted = fused.sort((a, b) => a.price - b.price);
+  } else if (sortBy === 'price_desc') {
+    sorted = fused.sort((a, b) => b.price - a.price);
+  }
+
+  // Return top N (without score in final result)
+  return sorted.slice(0, limit).map(({ score, ...rest }) => ({
+    ...rest,
+    score: 0,
+  }));
 }

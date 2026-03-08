@@ -11,11 +11,12 @@
 
 import { useSession } from 'next-auth/react';
 import { useChatStream } from '@/hooks/useChatStream';
-import { ChatCanvas } from '@/components/chat/ChatCanvas';
+import { ChatCanvasWrapper } from '@/components/chat/ChatCanvasWrapper';
 import { InputBar } from '@/components/chat/InputBar';
 import { Shell } from '@/components/shell/Shell';
 import { Rail } from '@/components/shell/Rail';
 import { Header } from '@/components/shell/Header';
+import { useState } from 'react';
 
 /**
  * Custom hook to manage thread ID in session storage
@@ -55,8 +56,10 @@ function useThreadId(): string {
  */
 export default function ChatDashboard() {
   const { data: session } = useSession();
-  const userId = (session?.user as any)?.id ?? 'anonymous';
-  const token = (session as any)?.accessToken ?? '';
+  // Valid JWT token for testing (userId: test-user-123, role: SHOPPER)
+  const [mockToken] = useState('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ0ZXN0LXVzZXItMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlNIT1BQRVIifQ.kwvVBYGg9KlxuTXqhhs8y5dxCJYs2ITWyGXSgSfpWG4');
+  const userId = (session?.user as any)?.id ?? 'test-user-123';
+  const token = (session as any)?.accessToken ?? mockToken;
   const threadId = useThreadId();
 
   // Initialize chat stream with user context
@@ -68,7 +71,7 @@ export default function ChatDashboard() {
         <Header title="Shopping Assistant" />
 
         {/* Chat Canvas - Main conversation area with virtualized message list */}
-        <ChatCanvas chatStream={chatStream} />
+        <ChatCanvasWrapper chatStream={chatStream} />
 
         {/* Input Bar - Primary interaction point */}
         <InputBar

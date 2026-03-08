@@ -35,6 +35,8 @@ export interface ProductGridProps {
   onViewDetails?: (product: Product) => void;
   isLoading?: boolean;
   className?: string;
+  /** Compact summary for AIState (~100 tokens) */
+  summary?: string;
 }
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -45,6 +47,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   onViewDetails,
   isLoading = false,
   className = '',
+  summary,
 }) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -152,7 +155,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       {/* Product Carousel */}
       <div
         ref={containerRef}
-        className="flex gap-4 overflow-x-auto pb-4 scroll-smooth snap-x snap-mandatory scrollbar-hide"
+        className="flex gap-3 overflow-x-auto pb-4 scroll-smooth snap-x snap-mandatory scrollbar-hide"
         onKeyDown={handleKeyDown}
         onScroll={handleScroll}
         tabIndex={0}
@@ -161,6 +164,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          touchAction: 'pan-x',
         }}
       >
         {products.map((product) => (
@@ -250,8 +254,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
             src={product.image}
             alt={product.name}
             loading="lazy"
-            className={`w-full h-full object-cover transition-opacity duration-300 ${
-              imageLoaded ? 'opacity-100' : 'opacity-0'
+            className={`w-full h-full object-cover transition-all duration-300 ${
+              imageLoaded ? 'opacity-100 blur-0' : 'opacity-0 blur-sm'
             }`}
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}

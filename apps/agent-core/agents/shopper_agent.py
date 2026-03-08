@@ -193,13 +193,13 @@ except ImportError:
 async def create_shopper_subgraph(redis_url: str):
     builder = StateGraph(ShopperState)
     builder.add_node("context", context_node)
-    builder.add_node("plan", plan_node)
+    builder.add_node("planner", plan_node)  # Renamed from "plan" to avoid state key conflict
     builder.add_node("execute", execute_node)
     builder.add_node("render", render_node)
     builder.add_node("taste_update", taste_update_node)
     builder.add_edge(START, "context")
-    builder.add_edge("context", "plan")
-    builder.add_edge("plan", "execute")
+    builder.add_edge("context", "planner")
+    builder.add_edge("planner", "execute")
     builder.add_edge("execute", "render")
     builder.add_edge("render", "taste_update")
     builder.add_edge("taste_update", END)
