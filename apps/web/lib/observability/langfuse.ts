@@ -59,7 +59,7 @@ export function initializeLangfuse(config?: Partial<LangfuseConfig>): Langfuse {
   const secretKey = config?.secretKey || env.LANGFUSE_SECRET_KEY || '';
   const baseUrl = config?.baseUrl || env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com';
   const environment = config?.environment || env.LANGFUSE_ENVIRONMENT || 'development';
-   const sampleRate = config?.sampleRate ?? env.LANGFUSE_SAMPLING_RATE ?? 1.0;
+   const sampleRate = config?.sampleRate ?? parseFloat(env.LANGFUSE_SAMPLING_RATE) ?? 1.0;
 
   if (!publicKey || !secretKey) {
     console.warn('[Langfuse] Missing API keys, using no-op client');

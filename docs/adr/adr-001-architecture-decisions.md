@@ -488,24 +488,24 @@ function createFallbackScoring(query: string, response: string) {
 
 ## Summary
 
-| ADR  | Decision                 | Key Benefit                              |
-|------|--------------------------|------------------------------------------|
-| 001  | LangGraph                | Explicit workflow control + persistence |
-| 002  | Multi-checkpointer       | Environment flexibility                 |
-| 003  | Qdrant                   | Semantic product search                 |
-| 004  | Ollama                   | Local, cost-free LLM inference          |
-| 005  | Langfuse                 | Complete observability                  |
-| 006  | Intent Router            | Intelligent query routing               |
-| 007  | Human-in-loop            | Refund approval workflow                |
-| 008  | Dual-mode scoring        | Reliable quality evaluation             |
+| ADR | Decision | Key Benefit |
+|-----|----------|-------------|
+| 001 | LangGraph | Explicit workflow control + persistence |
+| 002 | Multi-checkpointer | Environment flexibility |
+| 003 | Qdrant | Semantic product search |
+| 004 | Ollama | Local, cost-free LLM inference |
+| 005 | Langfuse | Complete observability |
+| 006 | Intent Router | Intelligent query routing |
+| 007 | Human-in-loop | Refund approval workflow |
+| 008 | Dual-mode scoring | Reliable quality evaluation |
 
 ---
 
 ## Revision History
 
-| Version | Date       | Author                | Changes   |
-|---------|------------|-----------------------|-----------|
-| 1.0     | 2024-01-22 | Smart Commerce Agent Team | Initial ADRs |
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2024-01-22 | Smart Commerce Agent Team | Initial ADRs |
 
 ---
 
@@ -525,13 +525,13 @@ Deploying the Smart Commerce Agent on a $0 budget requires avoiding heavy self-h
 
 Adopt a **hybrid cloud architecture** using serverless free tiers:
 
-| Component      | Local Docker            | Cloud (Free)              | Notes                                          |
-|----------------|-------------------------|---------------------------|------------------------------------------------|
-| Database       | pgvector/PostgreSQL     | **Neon.tech**             | Serverless Postgres, 100GB storage            |
-| State Store    | Redis                   | **Neon Postgres**         | LangGraph uses Postgres checkpointer          |
-| Vector DB      | Qdrant                  | **Qdrant Cloud**          | Free cluster, 1GB storage                     |
-| Observability  | Langfuse (self)         | **Langfuse Cloud**        | 50K traces/month free                         |
-| Hosting        | Docker                  | **Vercel + Render**       | Next.js + Workers                             |
+| Component | Local Docker | Cloud (Free) | Notes |
+|-----------|--------------|--------------|-------|
+| Database | pgvector/PostgreSQL | **Neon.tech** | Serverless Postgres, 100GB storage |
+| State Store | Redis | **Neon Postgres** | LangGraph uses Postgres checkpointer |
+| Vector DB | Qdrant | **Qdrant Cloud** | Free cluster, 1GB storage |
+| Observability | Langfuse (self) | **Langfuse Cloud** | 50K traces/month free |
+| Hosting | Docker | **Vercel + Render** | Next.js + Workers |
 
 ### Reasoning
 
