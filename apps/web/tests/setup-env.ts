@@ -3,7 +3,7 @@
  */
 import dotenv from 'dotenv';
 import path from 'path';
-import '@testing-library/jest-dom/vitest';
+import '@testing-library/jest-dom';
 
 // Load .env.local first so env vars are available
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
@@ -17,6 +17,11 @@ if (!process.env.DATABASE_URL) {
 }
 if (!process.env.REDIS_URL) {
   process.env.REDIS_URL = 'redis://localhost:6379';
+}
+
+// Mock scrollIntoView for jsdom
+if (typeof window !== 'undefined') {
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
 }
 
 console.log('[Test Setup] Loaded env vars:');

@@ -1,0 +1,11 @@
+{
+  "node_version": "20",
+  "graphs": {
+    "customer": "./src/graphs/customer.ts:graph",
+    "merchant": "./src/graphs/merchant.ts:graph"
+  },
+  "ui": {
+    "customer": "./src/ui/customer-ui.tsx",
+    "merchant": "./src/ui/merchant-ui.tsx"
+  }
+}

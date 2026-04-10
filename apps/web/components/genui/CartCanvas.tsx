@@ -156,6 +156,7 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center ${className}`}
         role="region"
         aria-label="Shopping cart"
+        data-testid="cart-canvas-empty"
       >
         <svg
           className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4"
@@ -184,9 +185,10 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
       className={`bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden ${className}`}
       role="region"
       aria-label="Shopping cart"
+      data-testid="cart-canvas"
     >
       {/* Header */}
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600" data-testid="cart-header">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
           Your Cart ({items.length} {items.length === 1 ? 'item' : 'items'})
         </h2>
@@ -206,7 +208,7 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
       </div>
 
       {/* Coupon Section */}
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-b border-gray-200 dark:border-gray-600">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-b border-gray-200 dark:border-gray-600" data-testid="cart-coupon-section">
         <div className="flex gap-2">
           <input
             type="text"
@@ -226,6 +228,7 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
             aria-label="Coupon code input"
             aria-invalid={!!coupon.error}
             aria-describedby={coupon.error ? 'coupon-error' : undefined}
+            data-testid="cart-coupon-input"
           />
           <button
             onClick={handleApplyCoupon}
@@ -233,6 +236,7 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
             className="min-h-[44px] min-w-[44px] px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-gray-600 rounded-md hover:bg-gray-800 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Apply coupon code"
             type="button"
+            data-testid="cart-coupon-apply"
           >
             {isApplyingCoupon ? 'Applying...' : coupon.applied ? 'Applied' : 'Apply'}
           </button>
@@ -250,37 +254,38 @@ export const CartCanvas: React.FC<CartCanvasProps> = ({
       </div>
 
       {/* Price Breakdown */}
-      <div className="px-4 py-3 space-y-2">
+      <div className="px-4 py-3 space-y-2" data-testid="cart-price-breakdown">
         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
           <span>Subtotal</span>
-          <span>${totals.subtotal.toFixed(2)}</span>
+          <span data-testid="cart-subtotal">${totals.subtotal.toFixed(2)}</span>
         </div>
         {totals.priceReductions > 0 && (
           <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
             <span>Price reductions</span>
-            <span>-${totals.priceReductions.toFixed(2)}</span>
+            <span data-testid="cart-price-reductions">-${totals.priceReductions.toFixed(2)}</span>
           </div>
         )}
         {coupon.applied && totals.couponDiscount > 0 && (
           <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
             <span>Coupon discount</span>
-            <span>-${totals.couponDiscount.toFixed(2)}</span>
+            <span data-testid="cart-coupon-discount">-${totals.couponDiscount.toFixed(2)}</span>
           </div>
         )}
         <div className="flex justify-between text-base font-semibold text-gray-900 dark:text-white border-t border-gray-200 dark:border-gray-600 pt-2">
           <span>Total</span>
-          <span>${totals.total.toFixed(2)}</span>
+          <span data-testid="cart-total">${totals.total.toFixed(2)}</span>
         </div>
       </div>
 
       {/* Checkout Button */}
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600" data-testid="cart-checkout-section">
         <button
           onClick={handleCheckout}
           disabled={isLoading || items.length === 0}
           className="w-full min-h-[44px] px-4 py-3 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Proceed to checkout"
           type="button"
+          data-testid="cart-checkout-button"
         >
           {isLoading ? 'Processing...' : `Checkout - $${totals.total.toFixed(2)}`}
         </button>
@@ -343,7 +348,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
   }
 
   return (
-    <div className="px-4 py-3 flex gap-3">
+    <div className="px-4 py-3 flex gap-3" data-testid={`cart-item-${item.id}`}>
       {/* Product Image */}
       {item.image ? (
         <img
@@ -372,11 +377,11 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
 
       {/* Product Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-gray-900 dark:text-white truncate">{item.name}</h3>
+        <h3 className="font-medium text-gray-900 dark:text-white truncate" data-testid={`cart-item-name-${item.id}`}>{item.name}</h3>
         <div className="flex items-center gap-2 mt-1">
           {hasPriceChange ? (
             <div className="flex items-center gap-1">
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white" data-testid={`cart-item-price-${item.id}`}>
                 ${item.price.toFixed(2)}
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400 line-through">
@@ -387,7 +392,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
               </span>
             </div>
           ) : (
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white" data-testid={`cart-item-price-${item.id}`}>
               ${item.price.toFixed(2)}
             </span>
           )}
@@ -401,6 +406,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
             className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={`Decrease quantity of ${item.name}`}
             type="button"
+            data-testid={`cart-item-decrement-${item.id}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -409,6 +415,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
           <span
             className="w-10 text-center font-medium text-gray-900 dark:text-white"
             aria-live="polite"
+            data-testid={`cart-item-quantity-${item.id}`}
           >
             {item.quantity}
           </span>
@@ -418,6 +425,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
             className="w-8 h-8 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={`Increase quantity of ${item.name}`}
             type="button"
+            data-testid={`cart-item-increment-${item.id}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -433,6 +441,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
         className="self-start min-h-[44px] min-w-[44px] flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         aria-label={`Remove ${item.name} from cart`}
         type="button"
+        data-testid={`cart-item-remove-${item.id}`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path

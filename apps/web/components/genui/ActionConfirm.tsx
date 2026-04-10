@@ -108,6 +108,7 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center ${className}`}
         role="alert"
         aria-live="polite"
+        data-testid="action-confirm-success"
       >
         <div className="w-16 h-16 mx-auto mb-4 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
           <svg
@@ -148,9 +149,10 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="action-confirm-title"
+      data-testid="action-confirm"
     >
       {/* Header */}
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600" data-testid="action-confirm-header">
         <div className="flex items-center gap-3">
           {isDanger && state !== 'success' && (
             <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
@@ -180,11 +182,12 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
       </div>
 
       {/* Content */}
-      <div className="px-4 py-4">
+      <div className="px-4 py-4" data-testid="action-confirm-content">
         {state === 'error' && errorMessage && (
           <div
             className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md"
             role="alert"
+            data-testid="action-confirm-error"
           >
             <div className="flex items-start gap-2">
               <svg
@@ -229,13 +232,14 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex gap-3">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex gap-3" data-testid="action-confirm-buttons">
         <button
           onClick={handleCancel}
           disabled={!isActionable || disabled}
           className="flex-1 min-h-[44px] px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label={cancelLabel}
           type="button"
+          data-testid="action-confirm-cancel"
         >
           {cancelLabel}
         </button>
@@ -245,6 +249,7 @@ export const ActionConfirm: React.FC<ActionConfirmProps> = ({
           className={`flex-1 min-h-[44px] px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${confirmButtonStyles}`}
           aria-label={confirmLabel}
           type="button"
+          data-testid="action-confirm-button"
         >
           {state === 'loading' ? (
             <span className="flex items-center justify-center gap-2">

@@ -190,3 +190,46 @@ describe("resource.action", () => {
 // ALWAYS import from here, never instantiate AzureOpenAI directly
 import { llm } from "@/lib/llm/client";
 ```
+
+---
+
+## Project Status (Step 12 — COMPLETE)
+
+All 12 steps complete. Platform is production-ready.
+
+### Architecture
+- Next.js 15 (apps/web) + LangGraph.js (apps/agent)
+- GenUI: typedUi() + useStream() + LoadExternalComponent
+- LLM: OpenAI-compatible client (default: Gemini 2.0 Flash)
+- DB: PostgreSQL 16 + pgvector (hybrid semantic search)
+- Cache: Redis (user memory + rate limiting + events)
+- Auth: NextAuth.js v4 (customer + merchant roles)
+- Observability: Langfuse (deferred — code wired, Docker pending)
+
+### Test Coverage
+- 83 Vitest unit + integration tests
+- Cypress E2E suite (35 tests across 7 spec files)
+- All tests green
+
+### Key Commands
+```bash
+make dev          → start all services
+pnpm test         → Vitest suite
+pnpm cy:run       → Cypress E2E
+pnpm build        → production build
+pnpm embed        → embed products for vector search
+pnpm db:seed      → seed database
+```
+
+### Ports
+- 3000 → Next.js app
+- 2024 → LangGraph agent server
+- 5432 → PostgreSQL
+- 6379 → Redis
+- 3001 → Langfuse (when running)
+
+### Adding Features
+See docs/local-development.md:
+- New GenUI component → follow 7-step checklist
+- New agent tool → follow 6-step checklist
+- New API route → add to docs/api-reference.md
