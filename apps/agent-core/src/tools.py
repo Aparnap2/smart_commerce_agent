@@ -253,10 +253,437 @@ async def initiate_return(
     })
 
 
+# ─────────────────────────────────────────────────────────
+# B2B PROCUREMENT TOOLS (PRD Part 5)
+# ─────────────────────────────────────────────────────────
+
+from datetime import datetime
+
+@tool
+async def search_catalog(
+    query: str,
+    category: Optional[str] = None,
+    max_unit_price: Optional[int] = None,
+    config: RunnableConfig = None,
+) -> str:
+    """Search the approved vendor catalog by natural language.
+    Returns catalog items with vendor, pricing, lead time.
+    category options: HARDWARE, SOFTWARE, SERVICES, OFFICE_SUPPLIES, INFRASTRUCTURE, OTHER"""
+
+    pool = await get_pool()
+    emb = await embed_query(query)
+    emb_str = f"[{','.join(map(str, emb))}]"
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, name, description, sku,
+                   "unitPrice", category, vendor,
+                   "vendorCode", "leadDays",
+                   "inStock", "minOrderQty"
+            FROM "CatalogItem"
+            WHERE ($2::text IS NULL OR category = $2)
+              AND ($3::int  IS NULL OR "unitPrice" <= $3)
+              AND "inStock" = true
+            ORDER BY embedding <=> $1::vector
+            LIMIT 6
+        """, emb_str, category, max_unit_price)
+
+    items = [dict(r) for r in rows]
+
+    return json.dumps({
+        "items": items,
+        "__ui__": {
+            "name": "catalog-grid",
+            "props": {"items": items, "loading": False}
+        }
+    })
+
+
+@tool
+async def get_budget_status(
+    config: RunnableConfig = None,
+) -> str:
+    """Get the employee's department budget status:
+    monthly limit, spent so far, and remaining balance."""
+
+    dept_id = (config or {}).get("configurable", {}).get("department_id")
+    if not dept_id:
+        return json.dumps({"error": "No department_id in config"})
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        dept = await conn.fetchrow("""
+            SELECT name, "monthlyBudget", "spentThisMonth"
+            FROM "Department" WHERE id = $1
+        """, dept_id)
+
+    budget = dept["monthlyBudget"]
+    spent = dept["spentThisMonth"]
+    remaining = budget - spent
+    pct = round(spent / budget * 100, 1) if budget else 0
+
+    return json.dumps({
+        "department": dept["name"],
+        "monthlyBudget": budget,
+        "spent": spent,
+        "remaining": remaining,
+        "percentUsed": pct,
+        "__ui__": {
+            "name": "budget-gauge",
+            "props": {
+                "department": dept["name"],
+                "monthlyBudget": budget,
+                "spent": spent,
+                "remaining": remaining,
+                "percentUsed": pct,
+            }
+        }
+    })
+
+
+@tool
+async def manage_purchase_request(
+    action: str,
+    justification: str = "",
+    urgency: str = "NORMAL",
+    pr_id: str = "",
+    catalog_item_id: str = "",
+    quantity: int = 1,
+    config: RunnableConfig = None,
+) -> str:
+    """Manage purchase requests.
+    action='create' → start a new PR (needs justification)
+    action='add_item' → add catalog item to draft PR
+    action='view' → get current draft PR with line items
+    action='remove_item' → remove a line item from draft PR"""
+
+    cfg = (config or {}).get("configurable", {})
+    employee_id = cfg.get("user_id", "unknown")
+    dept_id = cfg.get("department_id")
+    pool = await get_pool()
+
+    if action == "create":
+        async with pool.acquire() as conn:
+            count = await conn.fetchval('SELECT COUNT(*) FROM "PurchaseRequest"')
+            pr_number = f"PR-{datetime.now().year}-{int(count)+1:04d}"
+            pr = await conn.fetchrow("""
+                INSERT INTO "PurchaseRequest"
+                  ("prNumber","requestorId","departmentId", justification, urgency, "totalAmount")
+                VALUES ($1,$2,$3,$4,$5,0)
+                RETURNING id, "prNumber", status
+            """, pr_number, employee_id, dept_id, justification, urgency)
+
+            await conn.execute("""
+                INSERT INTO "PRAuditEntry"
+                  ("prId", action, actor, details)
+                VALUES ($1,'PR_CREATED',$2,$3)
+            """, pr["id"], employee_id, json.dumps({"justification": justification}))
+
+        return json.dumps({
+            "prId": pr["id"],
+            "prNumber": pr["prNumber"],
+            "status": pr["status"],
+        })
+
+    if action == "add_item":
+        async with pool.acquire() as conn:
+            item = await conn.fetchrow('SELECT * FROM "CatalogItem" WHERE id=$1', catalog_item_id)
+            if not item:
+                return json.dumps({"error": "Catalog item not found"})
+
+            line_total = item["unitPrice"] * quantity
+
+            dept = await conn.fetchrow("""
+                SELECT "monthlyBudget","spentThisMonth" FROM "Department" WHERE id=$1
+            """, dept_id)
+            remaining = dept["monthlyBudget"] - dept["spentThisMonth"]
+
+            if line_total > remaining:
+                return json.dumps({
+                    "error": "budget_exceeded",
+                    "__ui__": {
+                        "name": "budget-alert",
+                        "props": {
+                            "itemName": item["name"],
+                            "requested": line_total,
+                            "remaining": remaining,
+                        }
+                    }
+                })
+
+            await conn.execute("""
+                INSERT INTO "PRLineItem"
+                  ("prId","catalogItemId",quantity,"unitPrice","totalPrice")
+                VALUES ($1,$2,$3,$4,$5)
+                ON CONFLICT ("prId","catalogItemId") DO UPDATE
+                  SET quantity = EXCLUDED.quantity, "totalPrice" = EXCLUDED."totalPrice"
+            """, pr_id, catalog_item_id, quantity, item["unitPrice"], line_total)
+
+            await conn.execute("""
+                UPDATE "PurchaseRequest"
+                SET "totalAmount" = (
+                    SELECT COALESCE(SUM("totalPrice"),0) FROM "PRLineItem" WHERE "prId"=$1
+                )
+                WHERE id=$1
+            """, pr_id)
+
+            await conn.execute("""
+                INSERT INTO "PRAuditEntry"
+                  ("prId",action,actor,details)
+                VALUES ($1,'ITEM_ADDED',$2,$3)
+            """, pr_id, employee_id, json.dumps({"item": item["name"], "qty": quantity, "price": line_total}))
+
+        return json.dumps({"success": True, "itemName": item["name"], "quantity": quantity, "lineTotal": line_total})
+
+    if action == "view":
+        async with pool.acquire() as conn:
+            pr = await conn.fetchrow("""
+                SELECT * FROM "PurchaseRequest"
+                WHERE "requestorId"=$1 AND status='DRAFT'
+                ORDER BY "createdAt" DESC LIMIT 1
+            """, employee_id)
+
+            if not pr:
+                return json.dumps({"pr": None, "message": "No draft PR found. Create one first."})
+
+            items = await conn.fetch("""
+                SELECT li.*, ci.name, ci.vendor, ci.imageUrl
+                FROM "PRLineItem" li
+                JOIN "CatalogItem" ci ON ci.id=li."catalogItemId"
+                WHERE li."prId"=$1
+            """, pr["id"])
+
+        line_items = [dict(i) for i in items]
+
+        return json.dumps({
+            "pr": dict(pr),
+            "lineItems": line_items,
+            "__ui__": {
+                "name": "pr-draft",
+                "props": {
+                    "prNumber": pr["prNumber"],
+                    "lineItems": line_items,
+                    "total": pr["totalAmount"],
+                    "status": pr["status"],
+                }
+            }
+        })
+
+    return json.dumps({"error": f"Unknown action: {action}"})
+
+
+@tool
+async def submit_for_approval(
+    pr_id: str,
+    config: RunnableConfig = None,
+) -> str:
+    """Submit a draft purchase request to the department manager for approval."""
+
+    cfg = (config or {}).get("configurable", {})
+    employee_id = cfg.get("user_id", "unknown")
+    dept_id = cfg.get("department_id")
+    thread_id = cfg.get("thread_id", "unknown")
+    pool = await get_pool()
+
+    if not dept_id:
+        return json.dumps({"error": "No department_id in config"})
+
+    async with pool.acquire() as conn:
+        pr = await conn.fetchrow('SELECT * FROM "PurchaseRequest" WHERE id=$1', pr_id)
+        if not pr or pr["status"] != "DRAFT":
+            return json.dumps({"error": f"PR {pr_id} is not in DRAFT status"})
+
+        dept = await conn.fetchrow('SELECT * FROM "Department" WHERE id=$1', dept_id)
+
+        await conn.execute("""
+            INSERT INTO "PRApproval" ("prId","approverEmail",status)
+            VALUES ($1,$2,'PENDING')
+        """, pr_id, dept["approverEmail"])
+
+        await conn.execute("""
+            UPDATE "PurchaseRequest"
+            SET status='PENDING_APPROVAL', "submittedAt"=NOW(), "approvalThreadId"=$1
+            WHERE id=$2
+        """, thread_id, pr_id)
+
+        await conn.execute("""
+            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
+            VALUES ($1,'SUBMITTED',$2,$3)
+        """, pr_id, employee_id, json.dumps({"approver": dept["approverEmail"]}))
+
+    return json.dumps({
+        "success": True,
+        "__pr_submitted": True,
+        "prNumber": pr["prNumber"],
+        "approverEmail": dept["approverEmail"],
+        "totalAmount": pr["totalAmount"],
+        "__ui__": {
+            "name": "pr-submitted",
+            "props": {
+                "prNumber": pr["prNumber"],
+                "approverEmail": dept["approverEmail"],
+                "totalAmount": pr["totalAmount"],
+            }
+        }
+    })
+
+
+@tool
+async def get_purchase_requests(
+    status_filter: Optional[str] = None,
+    limit: int = 5,
+    config: RunnableConfig = None,
+) -> str:
+    """Get the employee's purchase request history.
+    Managers can see ALL department PRs."""
+
+    cfg = (config or {}).get("configurable", {})
+    employee_id = cfg.get("user_id", "unknown")
+    role = cfg.get("role", "EMPLOYEE")
+    dept_id = cfg.get("department_id")
+    pool = await get_pool()
+
+    if not dept_id:
+        return json.dumps({"error": "No department_id in config"})
+
+    async with pool.acquire() as conn:
+        if role in ("MANAGER", "FINANCE", "ADMIN"):
+            rows = await conn.fetch("""
+                SELECT pr.id, pr."prNumber", pr.status,
+                       pr."totalAmount", pr.justification,
+                       pr.urgency, pr."createdAt",
+                       u.name AS "requestorName",
+                       COUNT(li.id) AS "itemCount"
+                FROM "PurchaseRequest" pr
+                JOIN "User" u ON u.id = pr."requestorId"
+                LEFT JOIN "PRLineItem" li ON li."prId" = pr.id
+                WHERE pr."departmentId" = $1
+                  AND ($2::text IS NULL OR pr.status = $2)
+                GROUP BY pr.id, u.name
+                ORDER BY pr."createdAt" DESC
+                LIMIT $3
+            """, dept_id, status_filter, limit)
+        else:
+            rows = await conn.fetch("""
+                SELECT pr.id, pr."prNumber", pr.status,
+                       pr."totalAmount", pr.justification,
+                       pr.urgency, pr."createdAt",
+                       COUNT(li.id) AS "itemCount"
+                FROM "PurchaseRequest" pr
+                LEFT JOIN "PRLineItem" li ON li."prId" = pr.id
+                WHERE pr."requestorId" = $1
+                  AND ($2::text IS NULL OR pr.status = $2)
+                GROUP BY pr.id
+                ORDER BY pr."createdAt" DESC
+                LIMIT $3
+            """, employee_id, status_filter, limit)
+
+    prs = []
+    for r in rows:
+        d = dict(r)
+        d["createdAt"] = d["createdAt"].isoformat() if d.get("createdAt") else None
+        prs.append(d)
+
+    return json.dumps({
+        "purchaseRequests": prs,
+        "__ui__": {
+            "name": "pr-list",
+            "props": {"purchaseRequests": prs, "loading": False}
+        }
+    })
+
+
+@tool
+async def process_approval(
+    pr_id: str,
+    decision: str,
+    comments: str = "",
+    config: RunnableConfig = None,
+) -> str:
+    """Approve or reject a purchase request.
+    Only callable by MANAGER or ADMIN role."""
+
+    cfg = (config or {}).get("configurable", {})
+    approver_email = cfg.get("user_email", "unknown")
+    role = cfg.get("role")
+    pool = await get_pool()
+
+    if role not in ("MANAGER", "ADMIN"):
+        return json.dumps({"error": "Only MANAGER or ADMIN can approve PRs"})
+
+    if decision not in ("APPROVED", "REJECTED"):
+        return json.dumps({"error": "decision must be APPROVED or REJECTED"})
+
+    async with pool.acquire() as conn:
+        approval = await conn.fetchrow("""
+            SELECT a.id FROM "PRApproval" a
+            WHERE a."prId"=$1 AND a."approverEmail"=$2 AND a.status='PENDING'
+        """, pr_id, approver_email)
+
+        if not approval:
+            return json.dumps({"error": "No pending approval found for this PR"})
+
+        await conn.execute("""
+            UPDATE "PRApproval" SET status=$1, comments=$2, "decidedAt"=NOW()
+            WHERE id=$3
+        """, decision, comments, approval["id"])
+
+        await conn.execute("""
+            UPDATE "PurchaseRequest"
+            SET status=$1,
+                "approvedAt"=CASE WHEN $1='APPROVED' THEN NOW() ELSE NULL END,
+                "rejectedAt"=CASE WHEN $1='REJECTED' THEN NOW() ELSE NULL END,
+                notes=$2
+            WHERE id=$3
+        """, decision, comments, pr_id)
+
+        await conn.execute("""
+            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
+            VALUES ($1,$2,$3,$4)
+        """, pr_id, f"PR_{decision}", approver_email, json.dumps({"comments": comments}))
+
+    return json.dumps({"success": True, "prId": pr_id, "decision": decision, "comments": comments})
+
+
+@tool
+async def raise_dispute(
+    pr_id: str,
+    reason: str,
+    config: RunnableConfig = None,
+) -> str:
+    """Raise a dispute or cancellation on an approved or ordered purchase request."""
+
+    cfg = (config or {}).get("configurable", {})
+    employee_id = cfg.get("user_id", "unknown")
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            UPDATE "PurchaseRequest" SET status='DISPUTED'
+            WHERE id=$1 AND "requestorId"=$2
+        """, pr_id, employee_id)
+
+        await conn.execute("""
+            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
+            VALUES ($1,'DISPUTED',$2,$3)
+        """, pr_id, employee_id, json.dumps({"reason": reason}))
+
+    return json.dumps({
+        "success": True,
+        "message": "Dispute raised. Finance team notified.",
+        "__ui__": {
+            "name": "dispute-card",
+            "props": {"prId": pr_id, "reason": reason}
+        }
+    })
+
+
 ALL_TOOLS = [
-    search_products,
-    view_cart,
-    add_to_cart,
-    get_orders,
-    initiate_return,
+    search_catalog,
+    get_budget_status,
+    manage_purchase_request,
+    submit_for_approval,
+    get_purchase_requests,
+    process_approval,
+    raise_dispute,
 ]
