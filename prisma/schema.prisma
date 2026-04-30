@@ -12,14 +12,22 @@ datasource db {
 
 /// User model managed by NextAuth
 /// Supports both CUSTOMER and MERCHANT roles
+/// Extended for B2B procurement
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(SHOPPER)
-  name         String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  role               Role     @default(SHOPPER)
+  name               String?
+  // B2B fields
+  employeeRole       EmployeeRole? @default(EMPLOYEE)
+  department         String?
+  departmentId       String?
+  dept               Department? @relation(fields: [departmentId], references: [id])
+  purchaseRequests   PurchaseRequest[]
+  approvedOrders     Order[] @relation("OrderApprovals")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -232,6 +240,11 @@ model Order {
   paymentStatus   String?
   shippingAddress String?
   trackingNumber  String?
+  // B2B fields
+  prId            String?      @unique
+  pr              PurchaseRequest? @relation(fields: [prId], references: [id])
+  approvedById    String?
+  approvedBy      User?        @relation("OrderApprovals", fields: [approvedById], references: [id])
   Customer        Customer     @relation(fields: [customerId], references: [id])
   Product         Product      @relation(fields: [productId], references: [id])
   orderRefund     OrderRefund?
@@ -273,10 +286,164 @@ model user_embeddings {
   @@unique([user_id, query_text, context_type, context_id])
 }
 
+/// Department for B2B procurement
+model Department {
+  id             String   @id @default(cuid())
+  name           String   @unique   // "Engineering"
+  code           String   @unique   // "ENG"
+  monthlyBudget  Int      @default(0)  // paise / cents
+  spentThisMonth Int      @default(0)
+  approverEmail  String
+
+  employees      User[]
+  purchaseRequests PurchaseRequest[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Purchase Request
+model PurchaseRequest {
+  id            String   @id @default(cuid())
+  prNumber      String   @unique  // "PR-2026-0001"
+  status        PRStatus @default(DRAFT)
+  totalAmount   Int      @default(0)  // paise / cents
+  justification String
+  urgency       PRUrgency @default(NORMAL)
+  notes         String?  // approver notes
+
+  requestorId   String
+  requestor     User       @relation(fields: [requestorId], references: [id])
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id])
+
+  lineItems     PRLineItem[]
+  approvals     PRApproval[]
+  auditEntries  PRAuditEntry[]
+  order         Order?       // set after PO raised
+
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// PR Line Item
+model PRLineItem {
+  id             String  @id @default(cuid())
+  quantity       Int
+  unitPrice      Int     // paise / cents at time of request
+  totalPrice     Int
+
+  prId           String
+  pr             PurchaseRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
+  catalogItemId  String
+  catalogItem    CatalogItem @relation(fields: [catalogItemId], references: [id])
+
+  @@unique([prId, catalogItemId])
+}
+
+/// Catalog Item (replaces Product for B2B context)
+model CatalogItem {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  sku           String   @unique
+  unitPrice     Int      // paise / cents
+  category      CatalogCategory
+  vendor        String
+  vendorCode    String
+  leadDays      Int      @default(3)
+  inStock       Boolean  @default(true)
+  minOrderQty   Int      @default(1)
+  imageUrl      String?
+  embedding     Unsupported("vector(1536)")?
+
+  lineItems     PRLineItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// PR Approval
+model PRApproval {
+  id             String         @id @default(cuid())
+  status         ApprovalStatus @default(PENDING)
+  approverEmail  String
+  approverName   String?
+  comments       String?
+  decidedAt      DateTime?
+
+  prId           String
+  pr             PurchaseRequest @relation(fields: [prId], references: [id])
+
+  createdAt      DateTime @default(now())
+}
+
+/// PR Audit Entry (immutable append-only audit trail)
+model PRAuditEntry {
+  id        String   @id @default(cuid())
+  action    String   // "PR_CREATED" | "SUBMITTED" | "APPROVED" | ...
+  actor     String   // email or "SYSTEM"
+  details   Json     @default("{}")
+  prId      String
+  pr        PurchaseRequest @relation(fields: [prId], references: [id])
+  createdAt DateTime @default(now())
+}
+
 /// User roles for RBAC
 enum Role {
   SHOPPER
   MERCHANT
   SUPPORT
   ADMIN
+}
+
+/// Employee roles for B2B procurement
+enum EmployeeRole {
+  EMPLOYEE   // can create PRs
+  MANAGER    // can approve/reject PRs
+  FINANCE    // read-only; sees all PRs + budget
+  ADMIN      // full access (replaces old ADMIN)
+}
+
+/// Purchase Request status
+enum PRStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ORDERED       // PO raised, vendor notified
+  RECEIVED      // goods/services confirmed
+  DISPUTED
+  CANCELLED
+}
+
+/// Purchase Request urgency
+enum PRUrgency {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL     // bypasses standard 48h SLA
+}
+
+/// Approval status
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DELEGATED
+}
+
+/// Catalog item category
+enum CatalogCategory {
+  HARDWARE
+  SOFTWARE
+  SERVICES
+  OFFICE_SUPPLIES
+  INFRASTRUCTURE
+  OTHER
 }

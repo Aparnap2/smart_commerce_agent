@@ -10,11 +10,11 @@ beforeAll(async () => {
   await db.pRLineItem.deleteMany()
   await db.purchaseRequest.deleteMany()
   await db.catalogItem.deleteMany()
-  await db.user.deleteMany({ where: { 
-    email: { endsWith: '@test.procureai.com' } 
+  await db.user.deleteMany({ where: {
+    email: { endsWith: '@test.procureai.com' }
   }})
-  await db.department.deleteMany({ where: { 
-    code: { startsWith: 'TEST-' } 
+  await db.department.deleteMany({ where: {
+    code: { startsWith: 'TEST-' }
   }})
 })
 
@@ -25,8 +25,8 @@ describe('Department model', () => {
   it('creates a department with budget', async () => {
     const dept = await db.department.create({
       data: {
-        name: 'Test Engineering',
-        code: 'TEST-ENG',
+        name:          'Test Engineering',
+        code:          'TEST-ENG',
         monthlyBudget: 50000_00,
         approverEmail: 'mgr@test.procureai.com',
       }
@@ -40,8 +40,8 @@ describe('Department model', () => {
     await expect(
       db.department.create({
         data: {
-          name: 'Duplicate',
-          code: 'TEST-ENG', // duplicate
+          name:          'Duplicate',
+          code:          'TEST-ENG',   // duplicate
           monthlyBudget: 1000,
           approverEmail: 'x@test.procureai.com',
         }
@@ -58,24 +58,20 @@ describe('User B2B fields', () => {
     })
     const user = await db.user.create({
       data: {
-        email: 'emp@test.procureai.com',
-        passwordHash: 'test-hash-123',
-        employeeRole: 'EMPLOYEE',
+        email:        'emp@test.procureai.com',
+        role:         'EMPLOYEE',
         departmentId: dept!.id,
       }
     })
-    expect(user.employeeRole).toBe('EMPLOYEE')
+    expect(user.role).toBe('EMPLOYEE')
     expect(user.departmentId).toBe(dept!.id)
   })
 
-  it('defaults employeeRole to EMPLOYEE', async () => {
+  it('defaults role to EMPLOYEE', async () => {
     const user = await db.user.create({
-      data: { 
-        email: 'emp2@test.procureai.com',
-        passwordHash: 'test-hash-456',
-      }
+      data: { email: 'emp2@test.procureai.com' }
     })
-    expect(user.employeeRole).toBe('EMPLOYEE')
+    expect(user.role).toBe('EMPLOYEE')
   })
 })
 
@@ -84,14 +80,14 @@ describe('CatalogItem model', () => {
   it('creates an item with all required fields', async () => {
     const item = await db.catalogItem.create({
       data: {
-        name: 'Test MacBook Pro',
+        name:       'Test MacBook Pro',
         description:'Test description',
-        sku: 'TEST-HW-001',
-        unitPrice: 199900_00,
-        category: 'HARDWARE',
-        vendor: 'Apple Test',
+        sku:        'TEST-HW-001',
+        unitPrice:  199900_00,
+        category:   'HARDWARE',
+        vendor:     'Apple Test',
         vendorCode: 'TEST-MBP',
-        leadDays: 7,
+        leadDays:   7,
       }
     })
     expect(item.inStock).toBe(true)
@@ -104,7 +100,8 @@ describe('CatalogItem model', () => {
       db.catalogItem.create({
         data: {
           name:'Dup', description:'d', sku:'TEST-HW-001',
-          unitPrice:1, category:'HARDWARE', vendor:'V', vendorCode:'C', leadDays:1,
+          unitPrice:1, category:'HARDWARE',
+          vendor:'V', vendorCode:'C', leadDays:1,
         }
       })
     ).rejects.toThrow()
@@ -120,11 +117,11 @@ describe('PurchaseRequest model', () => {
     ])
     const pr = await db.purchaseRequest.create({
       data: {
-        prNumber: 'TEST-PR-0001',
-        requestorId: emp!.id,
+        prNumber:     'TEST-PR-0001',
+        requestorId:  emp!.id,
         departmentId: dept!.id,
         justification:'Test purchase',
-        totalAmount: 0,
+        totalAmount:  0,
       }
     })
     expect(pr.status).toBe('DRAFT')
@@ -144,21 +141,21 @@ describe('PurchaseRequest model', () => {
 
     await db.pRLineItem.create({
       data: {
-        prId: pr!.id,
+        prId:         pr!.id,
         catalogItemId:item!.id,
-        quantity: 1,
-        unitPrice: item!.unitPrice,
-        totalPrice: item!.unitPrice,
+        quantity:     1,
+        unitPrice:    item!.unitPrice,
+        totalPrice:   item!.unitPrice,
       }
     })
 
     await db.purchaseRequest.update({
       where: { id: pr!.id },
-      data: { totalAmount: item!.unitPrice }
+      data:  { totalAmount: item!.unitPrice }
     })
 
     const updated = await db.purchaseRequest.findUnique({
-      where: { id: pr!.id },
+      where:   { id: pr!.id },
       include: { lineItems: true }
     })
     expect(updated!.lineItems).toHaveLength(1)
@@ -174,9 +171,9 @@ describe('PRApproval model', () => {
     })
     const approval = await db.pRApproval.create({
       data: {
-        prId: pr!.id,
+        prId:          pr!.id,
         approverEmail: 'mgr@test.procureai.com',
-        status: 'PENDING',
+        status:        'PENDING',
       }
     })
     expect(approval.status).toBe('PENDING')
@@ -192,9 +189,9 @@ describe('PRAuditEntry model', () => {
     })
     const entry = await db.pRAuditEntry.create({
       data: {
-        prId: pr!.id,
-        action: 'PR_CREATED',
-        actor: 'emp@test.procureai.com',
+        prId:    pr!.id,
+        action:  'PR_CREATED',
+        actor:   'emp@test.procureai.com',
         details: { justification: 'Test purchase' },
       }
     })
@@ -207,18 +204,18 @@ describe('PRAuditEntry model', () => {
 describe('Relational integrity', () => {
   it('cascades delete PRLineItems when PR deleted', async () => {
     const pr = await db.purchaseRequest.findUnique({
-      where: { prNumber: 'TEST-PR-0001' },
+      where:   { prNumber: 'TEST-PR-0001' },
       include: { lineItems: true }
     })
     expect(pr!.lineItems.length).toBeGreaterThan(0)
 
     await db.pRAuditEntry.deleteMany({ where:{prId:pr!.id}})
-    await db.pRApproval.deleteMany({ where:{prId:pr!.id}})
+    await db.pRApproval.deleteMany({  where:{prId:pr!.id}})
     await db.purchaseRequest.delete({ where:{id:pr!.id}})
 
     const orphanedItems = await db.pRLineItem.findMany({
       where: { prId: pr!.id }
     })
-    expect(orphanedItems).toHaveLength(0) // cascade worked
+    expect(orphanedItems).toHaveLength(0)  // cascade worked
   })
 })
