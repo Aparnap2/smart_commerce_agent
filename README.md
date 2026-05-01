@@ -53,6 +53,15 @@
 │   MCP HTTP endpoints        │◄────│   GraphQL tool → commerce-api           │
 │   Prisma JS                 │     │   asyncpg (notifications only)          │
 └─────────────────────────────┘     └─────────────────────────────────────────┘
+
+#### agent-core Performance Optimizations
+
+| Optimization | Implementation |
+|--------------|----------------|
+| **Singletons** | DB pool, LLM, Redis initialized once at startup via `lifespan` |
+| **Payload Trimming** | LLM sees minimal fields (4), UI gets full data (14 fields) |
+| **Static Prompt Caching** | 1024+ token static prefix cached, dynamic user context at end |
+| **History Summarization** | Compresses 5+ message history into 3-sentence summary |
                     │                               │
                     └───────────────┬───────────────┘
                                     ▼

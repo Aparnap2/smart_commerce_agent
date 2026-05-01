@@ -1,9 +1,18 @@
 import json
+import uuid
 from typing import Optional
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
+from loguru import logger
 from .db import get_pool
-from .embeddings import embed_query
+
+logger.add(
+    "/tmp/agent.log",
+    rotation="10 MB",
+    level="DEBUG",
+    format="<level>{message}</level>",
+    filter=lambda record: "tool_call" in record["message"].lower() or "dept_id" in record["message"].lower()
+)
 
 
 @tool
@@ -16,31 +25,23 @@ async def search_products(
     in_stock_only: bool = True,
     config: RunnableConfig = None,
 ) -> str:
-    """Search for products using hybrid semantic + keyword search."""
+    """Search for products using keyword search."""
 
     pool = await get_pool()
-    embedding = await embed_query(query)
-    embedding_str = f"[{','.join(map(str, embedding))}]"
 
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT
-                id, name, price, stock, category, brand,
-                "imageUrl", rating,
-                (embedding <=> $1::vector) AS semantic_dist
+            SELECT id, name, price, stock, category, brand, "imageUrl", rating
             FROM "Product"
-            WHERE
-                ($2::text IS NULL OR category ILIKE $2)
-                AND ($3::text IS NULL OR brand ILIKE $3)
-                AND ($4::int  IS NULL OR price >= $4)
-                AND ($5::int  IS NULL OR price <= $5)
-                AND ($6 = FALSE OR stock > 0)
-            ORDER BY embedding <=> $1::vector
+            WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
+              AND ($2::text IS NULL OR category ILIKE $2)
+              AND ($3::text IS NULL OR brand ILIKE $3)
+              AND ($4::int IS NULL OR price >= $4)
+              AND ($5::int IS NULL OR price <= $5)
+              AND ($6 = FALSE OR stock > 0)
+            ORDER BY name ASC
             LIMIT 6
-        """,
-            embedding_str, category, brand,
-            min_price, max_price, in_stock_only,
-        )
+        """, query, category, brand, min_price, max_price, in_stock_only)
 
     products = [dict(r) for r in rows]
 
@@ -270,9 +271,8 @@ async def search_catalog(
     Returns catalog items with vendor, pricing, lead time.
     category options: HARDWARE, SOFTWARE, SERVICES, OFFICE_SUPPLIES, INFRASTRUCTURE, OTHER"""
 
+    logger.debug(f"search_catalog called with query='{query}', category='{category}'")
     pool = await get_pool()
-    emb = await embed_query(query)
-    emb_str = f"[{','.join(map(str, emb))}]"
 
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -281,20 +281,56 @@ async def search_catalog(
                    "vendorCode", "leadDays",
                    "inStock", "minOrderQty"
             FROM "CatalogItem"
-            WHERE ($2::text IS NULL OR category = $2)
-              AND ($3::int  IS NULL OR "unitPrice" <= $3)
-              AND "inStock" = true
-            ORDER BY embedding <=> $1::vector
+            WHERE "inStock" = true
+              AND ($1::text IS NULL OR category::text = $1::text)
+              AND ($2::int IS NULL OR "unitPrice" <= $2)
+              AND (
+                LOWER(sku) LIKE '%' || LOWER($3::text) || '%'
+                OR LOWER("vendorCode") LIKE '%' || LOWER($3::text) || '%'
+                OR LOWER(name) LIKE '%' || LOWER($3::text) || '%'
+                OR LOWER(description) LIKE '%' || LOWER($3::text) || '%'
+                OR LOWER("searchVector") LIKE '%' || LOWER($3::text) || '%'
+              )
+            ORDER BY
+              CASE
+                WHEN LOWER(sku) = LOWER($3::text) THEN 1
+                WHEN LOWER("vendorCode") = LOWER($3::text) THEN 2
+                WHEN LOWER(name) LIKE LOWER($3::text) || '%' THEN 3
+                ELSE 4
+              END,
+              "unitPrice" ASC
             LIMIT 6
-        """, emb_str, category, max_unit_price)
+        """, category, max_unit_price, query)
 
-    items = [dict(r) for r in rows]
+    items_ui = []  # Full data for frontend
+    items_llm = []  # Minimal data for LLM reasoning
 
+    for r in rows:
+        item = dict(r)
+        item["unitPrice"] = int(item["unitPrice"])
+        item["inStock"] = bool(item["inStock"])
+        item["leadDays"] = int(item["leadDays"])
+        item["minOrderQty"] = int(item["minOrderQty"])
+        item["formattedPrice"] = f"₹{item['unitPrice'] // 100:,}"
+
+        # Full data for UI rendering
+        items_ui.append(item)
+
+        # Minimal data for LLM - 80% fewer tokens
+        items_llm.append({
+            "id": str(item["id"]),
+            "name": item["name"],
+            "price": item["formattedPrice"],
+            "inStock": item["inStock"],
+        })
+
+    # LLM sees minimal data, frontend sees full data
     return json.dumps({
-        "items": items,
+        "items": items_llm,
+        "found": len(items_llm),
         "__ui__": {
             "name": "catalog-grid",
-            "props": {"items": items, "loading": False}
+            "props": {"items": items_ui, "loading": False}
         }
     })
 
@@ -357,36 +393,47 @@ async def manage_purchase_request(
     action='view' → get current draft PR with line items
     action='remove_item' → remove a line item from draft PR"""
 
-    cfg = (config or {}).get("configurable", {})
-    employee_id = cfg.get("user_id", "unknown")
-    dept_id = cfg.get("department_id")
+    logger.debug(f"Full config: {config}")
+    logger.debug(f"Config type: {type(config)}")
+    cfg = {}
+    if config:
+        cfg = config.get("configurable", {}) if hasattr(config, 'get') else {}
+    employee_email = cfg.get("user_id", "unknown") if cfg else "unknown"
+    dept_id = cfg.get("department_id") if cfg else None
+    logger.debug(f"manage_purchase_request: action={action}, user_id={employee_email}, dept_id={dept_id}")
     pool = await get_pool()
 
-    if action == "create":
-        async with pool.acquire() as conn:
+    async with pool.acquire() as conn:
+        user_row = await conn.fetchrow('SELECT id FROM users WHERE email = $1', employee_email)
+        if not user_row:
+            return json.dumps({"error": f"User {employee_email} not found"})
+        employee_id = user_row['id']
+
+        if action == "create":
+            urgency_upper = urgency.upper() if urgency else "NORMAL"
             count = await conn.fetchval('SELECT COUNT(*) FROM "PurchaseRequest"')
             pr_number = f"PR-{datetime.now().year}-{int(count)+1:04d}"
+            pr_id = str(uuid.uuid4())
             pr = await conn.fetchrow("""
                 INSERT INTO "PurchaseRequest"
-                  ("prNumber","requestorId","departmentId", justification, urgency, "totalAmount")
-                VALUES ($1,$2,$3,$4,$5,0)
+                  (id, "prNumber","requestorId","departmentId", justification, urgency, "totalAmount", "createdAt", "updatedAt")
+                VALUES ($1,$2,$3,$4,$5,$6,0,$7,$7)
                 RETURNING id, "prNumber", status
-            """, pr_number, employee_id, dept_id, justification, urgency)
+            """, pr_id, pr_number, employee_id, dept_id, justification, urgency_upper, datetime.now())
 
             await conn.execute("""
                 INSERT INTO "PRAuditEntry"
-                  ("prId", action, actor, details)
-                VALUES ($1,'PR_CREATED',$2,$3)
-            """, pr["id"], employee_id, json.dumps({"justification": justification}))
+                  (id, "prId", action, actor, details)
+                VALUES ($1, $2, 'PR_CREATED', $3, $4)
+            """, str(uuid.uuid4()), pr["id"], employee_email, json.dumps({"justification": justification}))
 
-        return json.dumps({
-            "prId": pr["id"],
-            "prNumber": pr["prNumber"],
-            "status": pr["status"],
-        })
+            return json.dumps({
+                "prId": pr["id"],
+                "prNumber": pr["prNumber"],
+                "status": pr["status"],
+            })
 
-    if action == "add_item":
-        async with pool.acquire() as conn:
+        if action == "add_item":
             item = await conn.fetchrow('SELECT * FROM "CatalogItem" WHERE id=$1', catalog_item_id)
             if not item:
                 return json.dumps({"error": "Catalog item not found"})
@@ -538,7 +585,7 @@ async def get_purchase_requests(
     Managers can see ALL department PRs."""
 
     cfg = (config or {}).get("configurable", {})
-    employee_id = cfg.get("user_id", "unknown")
+    employee_email = cfg.get("user_id", "unknown")
     role = cfg.get("role", "EMPLOYEE")
     dept_id = cfg.get("department_id")
     pool = await get_pool()
@@ -547,9 +594,14 @@ async def get_purchase_requests(
         return json.dumps({"error": "No department_id in config"})
 
     async with pool.acquire() as conn:
+        user_row = await conn.fetchrow('SELECT id FROM users WHERE email = $1', employee_email)
+        if not user_row:
+            return json.dumps({"purchaseRequests": [], "__ui__": {"name": "pr-list", "props": {"purchaseRequests": [], "loading": False}}})
+        employee_id = user_row['id']
+
         if role in ("MANAGER", "FINANCE", "ADMIN"):
             rows = await conn.fetch("""
-                SELECT pr.id, pr."prNumber", pr.status,
+                SELECT pr.id, pr."prNumber", pr.status::text AS status,
                        pr."totalAmount", pr.justification,
                        pr.urgency, pr."createdAt",
                        u.name AS "requestorName",
@@ -558,21 +610,21 @@ async def get_purchase_requests(
                 JOIN "User" u ON u.id = pr."requestorId"
                 LEFT JOIN "PRLineItem" li ON li."prId" = pr.id
                 WHERE pr."departmentId" = $1
-                  AND ($2::text IS NULL OR pr.status = $2)
+                  AND ($2::text IS NULL OR pr.status::text = $2)
                 GROUP BY pr.id, u.name
                 ORDER BY pr."createdAt" DESC
                 LIMIT $3
             """, dept_id, status_filter, limit)
         else:
             rows = await conn.fetch("""
-                SELECT pr.id, pr."prNumber", pr.status,
+                SELECT pr.id, pr."prNumber", pr.status::text AS status,
                        pr."totalAmount", pr.justification,
                        pr.urgency, pr."createdAt",
                        COUNT(li.id) AS "itemCount"
                 FROM "PurchaseRequest" pr
                 LEFT JOIN "PRLineItem" li ON li."prId" = pr.id
                 WHERE pr."requestorId" = $1
-                  AND ($2::text IS NULL OR pr.status = $2)
+                  AND ($2::text IS NULL OR pr.status::text = $2)
                 GROUP BY pr.id
                 ORDER BY pr."createdAt" DESC
                 LIMIT $3

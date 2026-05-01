@@ -1,23 +1,16 @@
+"""
+DB Pool - uses singleton from dependencies.py
+Initialized once at startup, reused everywhere.
+"""
 import asyncpg
-import os
-
-_pool: asyncpg.Pool | None = None
+from src.dependencies import get_pool as get_pool_singleton
 
 
 async def get_pool() -> asyncpg.Pool:
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(
-            dsn=os.environ["DATABASE_URL"],
-            min_size=2,
-            max_size=10,
-            command_timeout=30,
-        )
-    return _pool
+    """Get DB pool from singleton - avoids creating new pool per request."""
+    return get_pool_singleton()
 
 
 async def close_pool():
-    global _pool
-    if _pool:
-        await _pool.close()
-        _pool = None
+    """No-op - pool is closed via dependencies lifespan"""
+    pass
