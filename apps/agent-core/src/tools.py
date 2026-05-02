@@ -384,6 +384,7 @@ async def manage_purchase_request(
     urgency: str = "NORMAL",
     pr_id: str = "",
     catalog_item_id: str = "",
+    line_item_id: str = "",
     quantity: int = 1,
     config: RunnableConfig = None,
 ) -> str:
@@ -480,10 +481,9 @@ async def manage_purchase_request(
                 VALUES ($1,'ITEM_ADDED',$2,$3)
             """, pr_id, employee_id, json.dumps({"item": item["name"], "qty": quantity, "price": line_total}))
 
-        return json.dumps({"success": True, "itemName": item["name"], "quantity": quantity, "lineTotal": line_total})
+            return json.dumps({"success": True, "itemName": item["name"], "quantity": quantity, "lineTotal": line_total})
 
-    if action == "view":
-        async with pool.acquire() as conn:
+        if action == "view":
             pr = await conn.fetchrow("""
                 SELECT * FROM "PurchaseRequest"
                 WHERE "requestorId"=$1 AND status='DRAFT'
@@ -500,23 +500,65 @@ async def manage_purchase_request(
                 WHERE li."prId"=$1
             """, pr["id"])
 
-        line_items = [dict(i) for i in items]
+            line_items = [dict(i) for i in items]
 
-        return json.dumps({
-            "pr": dict(pr),
-            "lineItems": line_items,
-            "__ui__": {
-                "name": "pr-draft",
-                "props": {
-                    "prNumber": pr["prNumber"],
-                    "lineItems": line_items,
-                    "total": pr["totalAmount"],
-                    "status": pr["status"],
+            return json.dumps({
+                "pr": dict(pr),
+                "lineItems": line_items,
+                "__ui__": {
+                    "name": "pr-draft",
+                    "props": {
+                        "prNumber": pr["prNumber"],
+                        "lineItems": line_items,
+                        "total": pr["totalAmount"],
+                        "status": pr["status"],
+                    }
                 }
-            }
-        })
+            })
 
-    return json.dumps({"error": f"Unknown action: {action}"})
+        if action == "remove_item":
+            pr = await conn.fetchrow("""
+                SELECT * FROM "PurchaseRequest"
+                WHERE "requestorId"=$1 AND status='DRAFT'
+                ORDER BY "createdAt" DESC LIMIT 1
+            """, employee_id)
+
+            if not pr:
+                return json.dumps({"error": "No draft PR found"})
+
+            line_item = await conn.fetchrow("""
+                SELECT li.*, ci."unitPrice", ci."vendorId"
+                FROM "PRLineItem" li
+                JOIN "CatalogItem" ci ON ci.id=li."catalogItemId"
+                WHERE li.id=$1 AND li."prId"=$2
+            """, line_item_id, pr["id"])
+
+            if not line_item:
+                return json.dumps({"error": "Line item not found"})
+
+            refund_amount = line_item["totalPrice"]
+
+            dept = await conn.fetchrow("""
+                SELECT "monthlyBudget","spentThisMonth" FROM "Department" WHERE id=$1 FOR UPDATE
+            """, dept_id)
+
+            await conn.execute("""
+                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" - $1 WHERE id=$2
+            """, refund_amount, dept_id)
+
+            await conn.execute('DELETE FROM "PRLineItem" WHERE id=$1', line_item_id)
+
+            await conn.execute("""
+                UPDATE "PurchaseRequest"
+                SET "totalAmount" = (
+                    SELECT COALESCE(SUM("totalPrice"),0) FROM "PRLineItem" WHERE "prId"=$1
+                )
+                WHERE id=$1
+            """, pr["id"])
+
+            return json.dumps({"success": True, "refundAmount": refund_amount})
+
+        return json.dumps({"error": f"Unknown action: {action}"})
 
 
 @tool
