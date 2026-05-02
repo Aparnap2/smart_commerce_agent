@@ -293,7 +293,7 @@ model Department {
   code           String   @unique   // "ENG"
   monthlyBudget  Int      @default(0)  // paise / cents
   spentThisMonth Int      @default(0)
-  approverEmail  String
+  approverEmail  String   // Single approver per PRD
 
   employees      User[]
   purchaseRequests PurchaseRequest[]
@@ -334,7 +334,12 @@ model PRLineItem {
   id             String  @id @default(cuid())
   quantity       Int
   unitPrice      Int     // paise / cents at time of request
-  totalPrice     Int
+  totalPrice     Int     // line total before tax
+  
+  // Tax/GST fields (PRD Part 5 - Feature 2)
+  taxRate        Int      @default(18)  // GST rate in percent
+  taxAmount     Int      @default(0)  // calculated: line_total * tax_rate / 100
+  totalWithTax  Int      @default(0)  // calculated: line_total + tax_amount
 
   prId           String
   pr             PurchaseRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
@@ -346,19 +351,22 @@ model PRLineItem {
 
 /// Catalog Item (replaces Product for B2B context)
 model CatalogItem {
-  id            String   @id @default(cuid())
-  name          String
-  description   String
-  sku           String   @unique
-  unitPrice     Int      // paise / cents
-  category      CatalogCategory
-  vendor        String
-  vendorCode    String
-  leadDays      Int      @default(3)
-  inStock       Boolean  @default(true)
-  minOrderQty   Int      @default(1)
-  imageUrl      String?
-  embedding     Unsupported("vector(1536)")?
+  id              String   @id @default(cuid())
+  name            String
+  description     String
+  sku             String   @unique
+  unitPrice       Int      // paise / cents
+  category        CatalogCategory
+  vendor          String
+  vendorCode      String
+  leadDays        Int      @default(3)
+  inStock         Boolean  @default(true)
+  minOrderQty     Int      @default(1)
+  imageUrl        String?
+  vendorApproved  Boolean  @default(true)  // B2B: approved vendor list
+  msaExpiryDate   DateTime?               // B2B: MSA validity check
+  vendorRating    Int?                    // B2B: vendor performance (1-5)
+  searchVector  String?   // Full-text search: name + description + sku + vendor
 
   lineItems     PRLineItem[]
 
@@ -366,6 +374,7 @@ model CatalogItem {
   updatedAt     DateTime @updatedAt
 
   @@index([category])
+  @@index([searchVector])
 }
 
 /// PR Approval

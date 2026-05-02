@@ -20,6 +20,7 @@ logger.add(
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     user_id: str
+    user_role: Optional[str]
     step_count: int
     # B2B fields
     pending_pr_id: Optional[str]
@@ -179,7 +180,18 @@ async def call_agent(state: AgentState):
         system_msg,
         *state["messages"],
     ]
-    response = await llm.ainvoke(messages)
+
+    from langchain_core.runnables import RunnableConfig
+    config = RunnableConfig(
+        configurable={
+            "metadata": {
+                "department_id": dept_id,
+                "role": state.get("user_role", "EMPLOYEE"),
+                "app": "procureai",
+            }
+        }
+    )
+    response = await llm.ainvoke(messages, config=config)
 
     return {
         "messages": [response],
@@ -245,15 +257,73 @@ def approval_gate_node(state: AgentState) -> Command[Literal["agent", END]]:
         })
 
 
+def load_context_node(state: AgentState):
+    """Load user's procurement context at conversation start."""
+    import asyncpg
+    from src.dependencies import get_db_pool
+
+    user_id = state.get("user_id")
+    if not user_id:
+        return state
+
+    async def _load():
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            # Get user's current draft PR
+            draft_pr = await conn.fetchrow("""
+                SELECT id, "prNumber", "totalAmount", "status"
+                FROM "PurchaseRequest"
+                WHERE "requestorId"=$1 AND status='DRAFT'
+                ORDER BY "createdAt" DESC LIMIT 1
+            """, user_id)
+
+            # Get department budget status
+            dept_budget = await conn.fetchrow("""
+                SELECT d.id, d.name, d."monthlyBudget", d."spentThisMonth"
+                FROM "User" u
+                JOIN "Department" d ON d.id = u."departmentId"
+                WHERE u.id = $1
+            """, user_id)
+
+            updates = {}
+            if draft_pr:
+                updates["pending_pr_id"] = draft_pr["id"]
+                updates["pending_pr_number"] = draft_pr["prNumber"]
+                updates["pending_pr_total"] = draft_pr["totalAmount"]
+
+                items = await conn.fetch("""
+                    SELECT li.quantity, li."totalPrice", ci.name
+                    FROM "PRLineItem" li
+                    JOIN "CatalogItem" ci ON ci.id = li."catalogItemId"
+                    WHERE li."prId" = $1
+                """, draft_pr["id"])
+                updates["pending_pr_items"] = [dict(i) for i in items]
+
+            if dept_budget:
+                updates["__context__"] = {
+                    "department": {"name": dept_budget["name"], "budget": dept_budget["monthlyBudget"]},
+                    "spent": dept_budget["spentThisMonth"],
+                    "remaining": dept_budget["monthlyBudget"] - dept_budget["spentThisMonth"]
+                }
+
+            return updates
+
+    # Note: In production, this would be run in graph. For now, we just return state.
+    # Context will be loaded via first tool call if needed.
+    return state
+
+
 def build_graph():
     tool_node = ToolNode(ALL_TOOLS)
 
     builder = StateGraph(AgentState)
+    builder.add_node("load_context", load_context_node)
     builder.add_node("agent", call_agent)
     builder.add_node("tools", tool_node)
     builder.add_node("summarize", summarize_conversation)
     builder.add_node("approval_gate", approval_gate_node)
-    builder.set_entry_point("agent")
+    builder.set_entry_point("load_context")
+    builder.add_edge("load_context", "agent")
     builder.add_conditional_edges("agent", should_continue)
     builder.add_edge("tools", "summarize")
     builder.add_edge("summarize", "agent")

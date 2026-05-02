@@ -1,10 +1,77 @@
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
+
+# ─────────────────────────────────────────────────────────
+# DETERMINISTIC HELPER FUNCTIONS (PRD Part 5 - Features)
+# ─────────────────────────────────────────────────────────
+
+# Threshold constants (in paise)
+DEFAULT_TAX_RATE = 18  # Default 18% GST
+
+def get_default_tax_rate() -> int:
+    """Get default GST tax rate."""
+    return DEFAULT_TAX_RATE
+
+
+def calculate_tax_amount(line_total: int, tax_rate: int) -> int:
+    """
+    Calculate tax amount from line total and tax rate.
+    
+    Formula: taxAmount = line_total * tax_rate / 100
+    Result is rounded to nearest integer (paise).
+    """
+    if line_total <= 0:
+        return 0
+    return round(line_total * tax_rate / 100)
+
+
+def calculate_total_with_tax(line_total: int, tax_amount: int) -> int:
+    """Calculate total with tax added."""
+    return line_total + tax_amount
+
+
+def get_notification_event_type(decision: str) -> str:
+    """
+    Get notification event type for approval decision.
+    
+    Returns: PR_APPROVED | PR_REJECTED
+    """
+    if decision == "APPROVED":
+        return "PR_APPROVED"
+    elif decision == "REJECTED":
+        return "PR_REJECTED"
+    else:
+        return "PR_UNKNOWN"
+
+
+def get_notification_event_for_action(action: str) -> str:
+    """
+    Get notification event type for PR action.
+    
+    Returns: PR_SUBMITTED | PR_CREATED | etc.
+    """
+    action_map = {
+        "SUBMITTED": "PR_SUBMITTED",
+        "PR_CREATED": "PR_CREATED",
+        "PR_APPROVED": "PR_APPROVED",
+        "PR_REJECTED": "PR_REJECTED",
+    }
+    return action_map.get(action, f"PR_{action}")
+
+
+def build_notification_payload(pr_id: str, event_type: str) -> dict:
+    """Build notification event payload."""
+    return {
+        "pr_id": pr_id,
+        "event_type": event_type,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 logger.add(
     "/tmp/agent.log",
@@ -439,7 +506,29 @@ async def manage_purchase_request(
             if not item:
                 return json.dumps({"error": "Catalog item not found"})
 
+            # B2B: Vendor compliance check
+            if not item.get("vendorApproved", True):
+                return json.dumps({
+                    "error": "vendor_not_approved",
+                    "message": f"Vendor {item['vendor']} is not on the approved vendor list",
+                    "__ui__": {"name": "vendor-alert", "props": {"vendor": item["vendor"]}}
+                })
+
+            if item.get("msaExpiryDate"):
+                msa_expiry = item["msaExpiryDate"]
+                if msa_expiry < datetime.now(timezone.utc):
+                    return json.dumps({
+                        "error": "vendor_msa_expired",
+                        "message": f"MSA with vendor {item['vendor']} expired on {msa_expiry.date()}",
+                        "__ui__": {"name": "vendor-alert", "props": {"vendor": item["vendor"], "expiry": str(msa_expiry.date())}}
+                    })
+
             line_total = item["unitPrice"] * quantity
+            
+            # ─── TAX/GST CALCULATION (PRD Part 5 - Feature 2) ───
+            tax_rate = get_default_tax_rate()  # Default 18% GST
+            tax_amount = calculate_tax_amount(line_total, tax_rate)
+            total_with_tax = calculate_total_with_tax(line_total, tax_amount)
 
             dept = await conn.fetchrow("""
                 SELECT "monthlyBudget","spentThisMonth" FROM "Department" WHERE id=$1
@@ -461,11 +550,12 @@ async def manage_purchase_request(
 
             await conn.execute("""
                 INSERT INTO "PRLineItem"
-                  ("prId","catalogItemId",quantity,"unitPrice","totalPrice")
-                VALUES ($1,$2,$3,$4,$5)
+                  (id,"prId","catalogItemId",quantity,"unitPrice","totalPrice","taxRate","taxAmount","totalWithTax")
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                 ON CONFLICT ("prId","catalogItemId") DO UPDATE
-                  SET quantity = EXCLUDED.quantity, "totalPrice" = EXCLUDED."totalPrice"
-            """, pr_id, catalog_item_id, quantity, item["unitPrice"], line_total)
+                  SET quantity = EXCLUDED.quantity, "totalPrice" = EXCLUDED."totalPrice",
+                      "taxRate" = EXCLUDED."taxRate", "taxAmount" = EXCLUDED."taxAmount", "totalWithTax" = EXCLUDED."totalWithTax"
+            """, str(uuid.uuid4()), pr_id, catalog_item_id, quantity, item["unitPrice"], line_total, tax_rate, tax_amount, total_with_tax)
 
             await conn.execute("""
                 UPDATE "PurchaseRequest"
@@ -477,11 +567,30 @@ async def manage_purchase_request(
 
             await conn.execute("""
                 INSERT INTO "PRAuditEntry"
-                  ("prId",action,actor,details)
-                VALUES ($1,'ITEM_ADDED',$2,$3)
-            """, pr_id, employee_id, json.dumps({"item": item["name"], "qty": quantity, "price": line_total}))
+                  (id,"prId",action,actor,details)
+                VALUES ($1,$2,'ITEM_ADDED',$3,$4)
+            """, str(uuid.uuid4()), pr_id, employee_id, json.dumps({
+                "item": item["name"],
+                "qty": quantity,
+                "price": line_total,
+                "taxRate": tax_rate,
+                "taxAmount": tax_amount,
+                "totalWithTax": total_with_tax
+            }))
 
-            return json.dumps({"success": True, "itemName": item["name"], "quantity": quantity, "lineTotal": line_total})
+            await conn.execute("""
+                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" + $1 WHERE id=$2
+            """, line_total, dept_id)
+
+            return json.dumps({
+                "success": True,
+                "itemName": item["name"],
+                "quantity": quantity,
+                "lineTotal": line_total,
+                "taxRate": tax_rate,
+                "taxAmount": tax_amount,
+                "totalWithTax": total_with_tax
+            })
 
         if action == "view":
             pr = await conn.fetchrow("""
@@ -502,15 +611,25 @@ async def manage_purchase_request(
 
             line_items = [dict(i) for i in items]
 
+            # Calculate totals including tax
+            subtotal = sum(i.get("totalPrice", 0) for i in line_items)
+            total_tax = sum(i.get("taxAmount", 0) for i in line_items)
+            total_with_tax = sum(i.get("totalWithTax", 0) for i in line_items)
+
             return json.dumps({
                 "pr": dict(pr),
                 "lineItems": line_items,
+                "subtotal": subtotal,
+                "totalTax": total_tax,
+                "totalWithTax": total_with_tax,
                 "__ui__": {
                     "name": "pr-draft",
                     "props": {
                         "prNumber": pr["prNumber"],
                         "lineItems": line_items,
-                        "total": pr["totalAmount"],
+                        "subtotal": subtotal,
+                        "totalTax": total_tax,
+                        "totalWithTax": total_with_tax,
                         "status": pr["status"],
                     }
                 }
@@ -527,7 +646,7 @@ async def manage_purchase_request(
                 return json.dumps({"error": "No draft PR found"})
 
             line_item = await conn.fetchrow("""
-                SELECT li.*, ci."unitPrice", ci."vendorId"
+                SELECT li.*, ci."unitPrice", ci."vendor"
                 FROM "PRLineItem" li
                 JOIN "CatalogItem" ci ON ci.id=li."catalogItemId"
                 WHERE li.id=$1 AND li."prId"=$2
@@ -538,23 +657,24 @@ async def manage_purchase_request(
 
             refund_amount = line_item["totalPrice"]
 
-            dept = await conn.fetchrow("""
-                SELECT "monthlyBudget","spentThisMonth" FROM "Department" WHERE id=$1 FOR UPDATE
-            """, dept_id)
+            async with conn.transaction():
+                dept = await conn.fetchrow("""
+                    SELECT "monthlyBudget","spentThisMonth" FROM "Department" WHERE id=$1 FOR UPDATE
+                """, dept_id)
 
-            await conn.execute("""
-                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" - $1 WHERE id=$2
-            """, refund_amount, dept_id)
+                await conn.execute("""
+                    UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" - $1 WHERE id=$2
+                """, refund_amount, dept_id)
 
-            await conn.execute('DELETE FROM "PRLineItem" WHERE id=$1', line_item_id)
+                await conn.execute('DELETE FROM "PRLineItem" WHERE id=$1', line_item_id)
 
-            await conn.execute("""
-                UPDATE "PurchaseRequest"
-                SET "totalAmount" = (
-                    SELECT COALESCE(SUM("totalPrice"),0) FROM "PRLineItem" WHERE "prId"=$1
-                )
-                WHERE id=$1
-            """, pr["id"])
+                await conn.execute("""
+                    UPDATE "PurchaseRequest"
+                    SET "totalAmount" = (
+                        SELECT COALESCE(SUM("totalPrice"),0) FROM "PRLineItem" WHERE "prId"=$1
+                    )
+                    WHERE id=$1
+                """, pr["id"])
 
             return json.dumps({"success": True, "refundAmount": refund_amount})
 
@@ -566,7 +686,13 @@ async def submit_for_approval(
     pr_id: str,
     config: RunnableConfig = None,
 ) -> str:
-    """Submit a draft purchase request to the department manager for approval."""
+    """Submit a draft purchase request to the department manager for approval.
+    
+    Threshold-based routing:
+    - ≤ ₹50,000 → Manager (auto-approve possible)
+    - ₹50,001 - ₹2,00,000 → Department Head
+    - > ₹2,00,000 → Finance + Director
+    """
 
     cfg = (config or {}).get("configurable", {})
     employee_id = cfg.get("user_id", "unknown")
@@ -583,11 +709,25 @@ async def submit_for_approval(
             return json.dumps({"error": f"PR {pr_id} is not in DRAFT status"})
 
         dept = await conn.fetchrow('SELECT * FROM "Department" WHERE id=$1', dept_id)
+        
+        # ─── THRESHOLD-BASED APPROVER ROUTING ───
+        total_amount = pr["totalAmount"] or 0
+        approver_type = determine_approver_by_amount(total_amount)
+        
+        # Get approver email based on threshold
+        if approver_type == "MANAGER":
+            approver_email = dept["approverEmail"]
+        elif approver_type == "DEPT_HEAD":
+            # Use department head email from dept (if exists)
+            approver_email = dept.get("headEmail", dept["approverEmail"])
+        else:  # FINANCE_DIRECTOR
+            # For high-value PRs, route to finance
+            approver_email = dept.get("financeEmail", dept["approverEmail"])
 
         await conn.execute("""
             INSERT INTO "PRApproval" ("prId","approverEmail",status)
             VALUES ($1,$2,'PENDING')
-        """, pr_id, dept["approverEmail"])
+        """, pr_id, approver_email)
 
         await conn.execute("""
             UPDATE "PurchaseRequest"
@@ -596,21 +736,31 @@ async def submit_for_approval(
         """, thread_id, pr_id)
 
         await conn.execute("""
-            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
-            VALUES ($1,'SUBMITTED',$2,$3)
-        """, pr_id, employee_id, json.dumps({"approver": dept["approverEmail"]}))
+            INSERT INTO "PRAuditEntry" (id,"prId",action,actor,details)
+            VALUES ($1,$2,'SUBMITTED',$3,$4)
+        """, str(uuid.uuid4()), pr_id, employee_id, json.dumps({
+            "approver": approver_email,
+            "approverType": approver_type,
+            "totalAmount": total_amount
+        }))
+
+    # Build notification event
+    notification_event = build_notification_payload(pr_id, get_notification_event_for_action("SUBMITTED"))
 
     return json.dumps({
         "success": True,
         "__pr_submitted": True,
         "prNumber": pr["prNumber"],
-        "approverEmail": dept["approverEmail"],
+        "approverEmail": approver_email,
+        "approverType": approver_type,
         "totalAmount": pr["totalAmount"],
+        "__notification_event": notification_event,
         "__ui__": {
             "name": "pr-submitted",
             "props": {
                 "prNumber": pr["prNumber"],
-                "approverEmail": dept["approverEmail"],
+                "approverEmail": approver_email,
+                "approverType": approver_type,
                 "totalAmount": pr["totalAmount"],
             }
         }
@@ -649,7 +799,7 @@ async def get_purchase_requests(
                        u.name AS "requestorName",
                        COUNT(li.id) AS "itemCount"
                 FROM "PurchaseRequest" pr
-                JOIN "User" u ON u.id = pr."requestorId"
+                JOIN users u ON u.id = pr."requestorId"
                 LEFT JOIN "PRLineItem" li ON li."prId" = pr.id
                 WHERE pr."departmentId" = $1
                   AND ($2::text IS NULL OR pr.status::text = $2)
@@ -695,7 +845,12 @@ async def process_approval(
     config: RunnableConfig = None,
 ) -> str:
     """Approve or reject a purchase request.
-    Only callable by MANAGER or ADMIN role."""
+    Only callable by MANAGER or ADMIN role.
+    
+    Emits notification events:
+    - APPROVED → PR_APPROVED
+    - REJECTED → PR_REJECTED
+    """
 
     cfg = (config or {}).get("configurable", {})
     approver_email = cfg.get("user_email", "unknown")
@@ -732,11 +887,28 @@ async def process_approval(
         """, decision, comments, pr_id)
 
         await conn.execute("""
-            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
-            VALUES ($1,$2,$3,$4)
-        """, pr_id, f"PR_{decision}", approver_email, json.dumps({"comments": comments}))
+            INSERT INTO "PRAuditEntry" (id,"prId",action,actor,details)
+            VALUES ($1,$2,$3,$4,$5)
+        """, str(uuid.uuid4()), pr_id, f"PR_{decision}", approver_email, json.dumps({"comments": comments}))
 
-    return json.dumps({"success": True, "prId": pr_id, "decision": decision, "comments": comments})
+        pr = await conn.fetchrow('SELECT "totalAmount", "departmentId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
+        if pr and decision == "REJECTED":
+            total = pr["totalAmount"]
+            dept_id = pr["departmentId"]
+            await conn.execute("""
+                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" - $1 WHERE id=$2
+            """, total, dept_id)
+
+    # Build notification event for deterministic triggers
+    notification_event = build_notification_payload(pr_id, get_notification_event_type(decision))
+
+    return json.dumps({
+        "success": True,
+        "prId": pr_id,
+        "decision": decision,
+        "comments": comments,
+        "__notification_event": notification_event,
+    })
 
 
 @tool
@@ -758,9 +930,9 @@ async def raise_dispute(
         """, pr_id, employee_id)
 
         await conn.execute("""
-            INSERT INTO "PRAuditEntry" ("prId",action,actor,details)
-            VALUES ($1,'DISPUTED',$2,$3)
-        """, pr_id, employee_id, json.dumps({"reason": reason}))
+            INSERT INTO "PRAuditEntry" (id,"prId",action,actor,details)
+            VALUES ($1,$2,'DISPUTED',$3,$4)
+        """, str(uuid.uuid4()), pr_id, employee_id, json.dumps({"reason": reason}))
 
     return json.dumps({
         "success": True,
