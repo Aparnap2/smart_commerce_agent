@@ -1,217 +1,74 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters", "postgresqlExtensions"]
   output          = "../node_modules/.prisma/client"
+  previewFeatures = ["driverAdapters", "postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuid_ossp(map: "uuid-ossp", schema: "public")]
 }
-
-// ============================================================================
-// ENUMS
-// ============================================================================
-
-/// User roles for RBAC
-enum Role {
-  CUSTOMER
-  MERCHANT
-  ADMIN
-}
-
-/// Order status lifecycle
-enum OrderStatus {
-  PENDING
-  PAID
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  REFUNDED
-}
-
-/// Return request options
-enum ReturnOption {
-  REPLACEMENT
-  REFUND
-  STORE_CREDIT
-}
-
-/// Commerce event types for proactive agent notifications
-enum CommerceEventType {
-  CART_ABANDONED
-  STOCK_LOW
-  PRICE_DROP
-  ORDER_CREATED
-  ORDER_SHIPPED
-  RETURN_REQUESTED
-}
-
-// ============================================================================
-// CORE MODELS
-// ============================================================================
 
 /// User model managed by NextAuth
 /// Supports both CUSTOMER and MERCHANT roles
+/// Extended for B2B procurement
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String   // Hashed password
-  role      Role     @default(CUSTOMER)
-  name      String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  cart           Cart?
-  orders         Order[]
-  returnRequests ReturnRequest[]
-  commerceEvents CommerceEvent[]
-  agentTraces    AgentTrace[]
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  role               Role     @default(SHOPPER)
+  name               String?
+  // B2B fields
+  employeeRole       EmployeeRole? @default(EMPLOYEE)
+  department         String?
+  departmentId       String?
+  dept               Department? @relation(fields: [departmentId], references: [id])
+  purchaseRequests   PurchaseRequest[]
+  approvedOrders     Order[] @relation("OrderApprovals")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("users")
-}
-
-/// Product with semantic search embedding support
-/// Uses pgvector for 1536-dimensional vectors (text-embedding-3-small)
-model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  price       Int      // Store in smallest currency unit (e.g., cents/paise)
-  category    String
-  stockCount  Int      @default(0)
-  embedding   Unsupported("vector(1536)")? // Semantic embedding for vector search
-  version     Int      @default(1) // Optimistic locking
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Indexes for performance
-  @@index([embedding])
-  @@index([category])
-  @@index([stockCount])
-  @@map("products")
 }
 
 /// Shopping Cart (per-user, single active cart)
 /// Uses JSONB for items to avoid N+1 queries on cart retrieval
 model Cart {
-  id        String   @id @default(cuid())
-  userId    String   @unique @map("user_id") // One cart per user
-  items     Json     @default("[]") // Array of {productId, quantity, price}
-  total     Int      @default(0) // Total in smallest currency unit
-  version   Int      @default(1) // Optimistic locking
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String     @id @default(cuid())
+  customerId  String     @unique @map("customer_id")
+  coupon_code String?
+  version     Int        @default(1)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  cartItems   CartItem[]
 
   @@map("carts")
-}
-
-/// Order (immutable after creation)
-/// Tracks complete purchase transactions
-model Order {
-  id               String      @id @default(cuid())
-  userId           String      @map("user_id")
-  status           OrderStatus @default(PENDING)
-  stripePaymentIntent String?  @map("stripe_payment_intent_id")
-  items            Json        @default("[]") // Snapshot of items at purchase time
-  total            Int         // Total in smallest currency unit
-  trackingNumber   String?     @map("tracking_number")
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
-
-  // Relations
-  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  returnRequests ReturnRequest[]
-
-  // Indexes for performance
-  @@index([userId, status])
-  @@index([stripePaymentIntent])
-  @@index([status])
-  @@map("orders")
-}
-
-/// Return Request (agentic returns flow)
-/// Manages conversational return/refund process
-model ReturnRequest {
-  id           String       @id @default(cuid())
-  orderId      String       @map("order_id")
-  userId       String       @map("user_id")
-  reason       String
-  policy       Json         @default("{}") // Return policy snapshot at time of request
-  chosenOption ReturnOption @map("chosen_option")
-  stripeRefundId String?    @map("stripe_refund_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-
-  // Relations
-  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indexes
-  @@index([orderId])
-  @@index([userId])
-  @@index([stripeRefundId])
-  @@map("return_requests")
 }
 
 /// Commerce Event (events layer for proactive agent notifications)
 /// Tracks events like cart abandonment, stock alerts, price drops
 model CommerceEvent {
-  id          String            @id @default(cuid())
-  type        CommerceEventType
-  userId      String?           @map("user_id")
-  payload     Json              @default("{}") // Event-specific data
-  processed   Boolean           @default(false)
-  processedAt DateTime?         @map("processed_at")
-  createdAt   DateTime          @default(now()) @map("created_at")
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type  String
+  userId      String?   @map("user_id")
+  payload     Json
+  processed   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(6)
 
-  // Relations
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  // Indexes for efficient polling
-  @@index([processed, createdAt])
-  @@index([userId, createdAt])
-  @@index([type])
+  @@index([userId, createdAt], map: "idx_commerce_events_user")
   @@map("commerce_events")
 }
-
-/// Agent Trace (audit trail for all agent tool executions)
-/// Provides observability and debugging for agent actions
-model AgentTrace {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  sessionId  String   @map("session_id")
-  toolName   String   @map("tool_name")
-  input      Json     @default("{}") // Tool input parameters
-  output     Json     @default("{}") // Tool execution result
-  latencyMs  Int      @map("latency_ms") // Execution time in milliseconds
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indexes for querying traces
-  @@index([userId, createdAt])
-  @@index([sessionId])
-  @@index([toolName])
-  @@map("agent_traces")
-}
-
-// ============================================================================
-// LEGACY/HELPER MODELS (Keep existing for backward compatibility)
-// ============================================================================
 
 /// Product embedding for semantic search (legacy, kept for migration)
 model ProductEmbedding {
   id             String                @id @default(uuid())
-  productId      String                @map("product_id")
+  productId      Int                   @map("product_id")
   embedding      Unsupported("vector") @map("embedding")
   embeddingModel String                @default("nomic-embed-text") @map("embedding_model")
   createdAt      DateTime              @default(now()) @map("created_at")
+  Product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("product_embeddings")
 }
@@ -242,7 +99,7 @@ model DocumentChunk {
   tokenCount Int?                  @map("token_count")
   metadata   Json?                 @default("{}")
   createdAt  DateTime?             @default(now()) @map("created_at")
-  document   Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   Document              @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
@@ -260,4 +117,333 @@ model WebhookEvent {
   @@index([eventId])
   @@index([eventType])
   @@map("webhook_events")
+}
+
+/// Customer profile - separate from User for billing/shipping info
+model Customer {
+  id             Int             @id @default(autoincrement())
+  name           String?
+  email          String          @unique
+  phone          String?
+  address        String?
+  paymentMethod  String?
+  billingAddress String?
+  createdAt      DateTime        @default(now())
+  Order          Order[]
+  SupportTicket  SupportTicket[]
+
+  @@map("Customer")
+}
+
+/// Support ticket for customer service
+model SupportTicket {
+  id             Int      @id @default(autoincrement())
+  customerId     Int
+  issue          String
+  status         String
+  createdAt      DateTime @default(now())
+  priority       String?
+  relatedOrderId Int?
+  resolution     String?
+  Customer       Customer @relation(fields: [customerId], references: [id])
+
+  @@map("SupportTicket")
+}
+
+/// Cart item - line items in a cart
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String  @map("cart_id")
+  productId Int     @map("product_id")
+  quantity  Int     @default(1)
+  price     Float
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+/// Promotional coupon
+model Coupon {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  discountType   String    @map("discount_type")
+  discountValue  Float     @map("discount_value")
+  minOrderAmount Float?    @map("min_order_amount")
+  expiresAt      DateTime? @map("expires_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("coupons")
+}
+
+/// Stripe refund record
+model Refund {
+  id              Int      @id @default(autoincrement())
+  stripeRefundId  String   @unique @map("stripe_refund_id")
+  paymentIntentId String   @map("payment_intent_id")
+  orderId         Int?     @map("order_id")
+  customerEmail   String?  @map("customer_email")
+  amount          Int
+  currency        String   @default("usd")
+  status          String
+  reason          String?
+  idempotencyKey  String?  @map("idempotency_key")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  order           Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([paymentIntentId])
+  @@index([status])
+  @@map("refunds")
+}
+
+/// Agent notification for proactive messaging
+model AgentNotification {
+  id         String    @id @default(uuid())
+  customerId String    @map("customer_id")
+  type       String
+  payload    String
+  read       Boolean   @default(false)
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([customerId, read])
+  @@map("agent_notifications")
+}
+
+/// Order refund status tracking
+model OrderRefund {
+  id           Int      @id @default(autoincrement())
+  orderId      Int      @unique @map("order_id")
+  refundStatus String   @default("none") @map("refund_status")
+  refundAmount Int      @default(0) @map("refund_amount")
+  lastRefundId String?  @map("last_refund_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  order        Order    @relation(fields: [orderId], references: [id])
+
+  @@map("order_refunds")
+}
+
+model Order {
+  id              Int          @id @default(autoincrement())
+  customerId      Int
+  productId       Int
+  orderDate       DateTime     @default(now())
+  total           Float
+  status          String
+  quantity        Int          @default(1)
+  paymentStatus   String?
+  shippingAddress String?
+  trackingNumber  String?
+  // B2B fields
+  prId            String?      @unique
+  pr              PurchaseRequest? @relation(fields: [prId], references: [id])
+  approvedById    String?
+  approvedBy      User?        @relation("OrderApprovals", fields: [approvedById], references: [id])
+  Customer        Customer     @relation(fields: [customerId], references: [id])
+  Product         Product      @relation(fields: [productId], references: [id])
+  orderRefund     OrderRefund?
+  refunds         Refund[]
+}
+
+model Product {
+  id                 Int                      @id @default(autoincrement())
+  name               String
+  description        String?
+  price              Float
+  stock              Int
+  image              String?
+  category           String?
+  sku                String?
+  brand              String?
+  rating             Float?
+  version            Int                     @default(1)
+  search_vector      Unsupported("tsvector")?
+  embedding          Unsupported("vector")?
+  Order              Order[]
+  cartItems          CartItem[]
+  product_embeddings ProductEmbedding[]
+
+  @@index([search_vector], map: "product_search_idx", type: Gin)
+}
+
+model user_embeddings {
+  id           String                @id
+  user_id      String
+  embedding    Unsupported("vector")
+  query_text   String
+  context_type String
+  context_id   String?
+  metadata     Json?                 @default("{}")
+  created_at   DateTime              @default(now())
+  updated_at   DateTime
+
+  @@unique([user_id, query_text, context_type, context_id])
+}
+
+/// Department for B2B procurement
+model Department {
+  id             String   @id @default(cuid())
+  name           String   @unique   // "Engineering"
+  code           String   @unique   // "ENG"
+  monthlyBudget  Int      @default(0)  // paise / cents
+  spentThisMonth Int      @default(0)
+  approverEmail  String
+
+  employees      User[]
+  purchaseRequests PurchaseRequest[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Purchase Request
+model PurchaseRequest {
+  id            String   @id @default(cuid())
+  prNumber      String   @unique  // "PR-2026-0001"
+  status        PRStatus @default(DRAFT)
+  totalAmount   Int      @default(0)  // paise / cents
+  justification String
+  urgency       PRUrgency @default(NORMAL)
+  notes         String?  // approver notes
+
+  requestorId   String
+  requestor     User       @relation(fields: [requestorId], references: [id])
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id])
+
+  lineItems     PRLineItem[]
+  approvals     PRApproval[]
+  auditEntries  PRAuditEntry[]
+  order         Order?       // set after PO raised
+
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// PR Line Item
+model PRLineItem {
+  id             String  @id @default(cuid())
+  quantity       Int
+  unitPrice      Int     // paise / cents at time of request
+  totalPrice     Int
+
+  prId           String
+  pr             PurchaseRequest @relation(fields: [prId], references: [id], onDelete: Cascade)
+  catalogItemId  String
+  catalogItem    CatalogItem @relation(fields: [catalogItemId], references: [id])
+
+  @@unique([prId, catalogItemId])
+}
+
+/// Catalog Item (replaces Product for B2B context)
+model CatalogItem {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  sku           String   @unique
+  unitPrice     Int      // paise / cents
+  category      CatalogCategory
+  vendor        String
+  vendorCode    String
+  leadDays      Int      @default(3)
+  inStock       Boolean  @default(true)
+  minOrderQty   Int      @default(1)
+  imageUrl      String?
+  embedding     Unsupported("vector(1536)")?
+
+  lineItems     PRLineItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// PR Approval
+model PRApproval {
+  id             String         @id @default(cuid())
+  status         ApprovalStatus @default(PENDING)
+  approverEmail  String
+  approverName   String?
+  comments       String?
+  decidedAt      DateTime?
+
+  prId           String
+  pr             PurchaseRequest @relation(fields: [prId], references: [id])
+
+  createdAt      DateTime @default(now())
+}
+
+/// PR Audit Entry (immutable append-only audit trail)
+model PRAuditEntry {
+  id        String   @id @default(cuid())
+  action    String   // "PR_CREATED" | "SUBMITTED" | "APPROVED" | ...
+  actor     String   // email or "SYSTEM"
+  details   Json     @default("{}")
+  prId      String
+  pr        PurchaseRequest @relation(fields: [prId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+/// User roles for RBAC
+enum Role {
+  SHOPPER
+  MERCHANT
+  SUPPORT
+  ADMIN
+}
+
+/// Employee roles for B2B procurement
+enum EmployeeRole {
+  EMPLOYEE   // can create PRs
+  MANAGER    // can approve/reject PRs
+  FINANCE    // read-only; sees all PRs + budget
+  ADMIN      // full access (replaces old ADMIN)
+}
+
+/// Purchase Request status
+enum PRStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ORDERED       // PO raised, vendor notified
+  RECEIVED      // goods/services confirmed
+  DISPUTED
+  CANCELLED
+}
+
+/// Purchase Request urgency
+enum PRUrgency {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL     // bypasses standard 48h SLA
+}
+
+/// Approval status
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DELEGATED
+}
+
+/// Catalog item category
+enum CatalogCategory {
+  HARDWARE
+  SOFTWARE
+  SERVICES
+  OFFICE_SUPPLIES
+  INFRASTRUCTURE
+  OTHER
 }

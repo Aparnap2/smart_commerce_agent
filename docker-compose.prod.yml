@@ -1,0 +1,108 @@
+name: smart-commerce-prod
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: always
+    environment:
+      POSTGRES_DB: smart_commerce
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d smart_commerce"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-redis}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 10s
+      retries: 5
+    networks: [internal]
+
+  migrate:
+    image: smart-commerce-web:latest
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/smart_commerce
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    restart: on-failure
+
+  agent:
+    image: smart-commerce-agent:latest
+    restart: always
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/smart_commerce
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-disabled}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-disabled}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-disabled}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2024/ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  web:
+    image: smart-commerce-web:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/smart_commerce
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379
+      LANGGRAPH_URL: http://agent:2024
+      NEXT_PUBLIC_LANGGRAPH_URL: http://agent:2024
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-disabled}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-disabled}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-disabled}
+    depends_on:
+      agent: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [internal, external]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  internal:
+    internal: true
+  external:
+    driver: bridge

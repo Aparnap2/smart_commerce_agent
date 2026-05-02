@@ -6,10 +6,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Start seeding...');
 
-  // --- Users (one per role) ---
   const hashedPassword = await bcrypt.hash('password123', 12);
   
-  const shopper = await prisma.user.upsert({
+  // --- Users ---
+  await prisma.user.upsert({
     where: { email: 'shopper@example.com' },
     update: {},
     create: {
@@ -20,7 +20,7 @@ async function main() {
     },
   });
 
-  const merchant = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'merchant@example.com' },
     update: {},
     create: {
@@ -31,7 +31,7 @@ async function main() {
     },
   });
 
-  const support = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'support@example.com' },
     update: {},
     create: {
@@ -42,7 +42,7 @@ async function main() {
     },
   });
 
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'admin@example.com' },
     update: {},
     create: {
@@ -53,228 +53,45 @@ async function main() {
     },
   });
 
-  console.log('Created users:', { shopper, merchant, support, admin });
+  console.log('Created users');
 
-  // --- Customers ---
-  const alice = await prisma.customer.upsert({
-    where: { email: 'alice@example.com' },
-    update: {},
-    create: {
-      email: 'alice@example.com',
-      name: 'Alice Smith',
-      phone: '123-456-7890',
-      address: '123 Main St, Anytown USA',
-    },
-  });
+  // --- Products ---
+  const products = [
+    { id: 'prod_1', name: 'Wireless Headphones', description: 'Premium noise-cancelling headphones', price: 11990, category: 'Electronics', stockCount: 50 },
+    { id: 'prod_2', name: 'Smartphone X', description: 'Latest generation smartphone', price: 69990, category: 'Electronics', stockCount: 30 },
+    { id: 'prod_3', name: 'Laptop Pro', description: '15-inch professional laptop', price: 89990, category: 'Electronics', stockCount: 20 },
+    { id: 'prod_4', name: 'Smart Watch', description: 'Fitness tracking smartwatch', price: 4990, category: 'Electronics', stockCount: 100 },
+    { id: 'prod_5', name: 'Bluetooth Speaker', description: 'Portable waterproof speaker', price: 2990, category: 'Electronics', stockCount: 75 },
+    { id: 'prod_6', name: 'Tablet Mini', description: '8-inch tablet for travel', price: 19990, category: 'Electronics', stockCount: 40 },
+    { id: 'prod_7', name: 'Gaming Mouse', description: 'RGB gaming mouse with programmable buttons', price: 1990, category: 'Electronics', stockCount: 150 },
+    { id: 'prod_8', name: 'Mechanical Keyboard', description: 'RGB mechanical keyboard', price: 5990, category: 'Electronics', stockCount: 60 },
+    { id: 'prod_9', name: 'USB-C Hub', description: '7-in-1 USB-C hub', price: 2490, category: 'Electronics', stockCount: 80 },
+    { id: 'prod_10', name: 'Webcam HD', description: '1080p webcam for video calls', price: 3990, category: 'Electronics', stockCount: 45 },
+  ];
 
-  const bob = await prisma.customer.upsert({
-    where: { email: 'bob@example.com' },
-    update: {},
-    create: {
-      email: 'bob@example.com',
-      name: 'Bob Johnson',
-      phone: '987-654-3210',
-      address: '456 Oak Ave, Otherville USA',
-    },
-  });
+  for (const product of products) {
+    await prisma.product.upsert({
+      where: { id: product.id },
+      update: {},
+      create: product,
+    });
+  }
 
-  const charlie = await prisma.customer.upsert({
-    where: { email: 'charlie@sample.net' },
-    update: {},
-    create: {
-      email: 'charlie@sample.net',
-      name: 'Charlie Brown',
-      phone: '555-123-4567',
-      address: '789 Pine Ln, Somewhere USA',
-    },
-  });
+  console.log('Created products:', products.length);
 
-  const diana = await prisma.customer.upsert({
-    where: { email: 'diana@test.org' },
-    update: {},
-    create: {
-      email: 'diana@test.org',
-      name: 'Diana Prince',
-      phone: '555-987-6543',
-      address: '1 Wonder Way, Themyscira',
-    },
-  });
-
-  console.log('Created customers:', { alice, bob, charlie, diana });
-
-  // --- Products (Seed these BEFORE Orders) ---
-  const product1 = await prisma.product.upsert({
-    where: { id: 101 }, // Use IDs that you will reference in Orders
-    update: {},
-    create: {
-      id: 101,
-      name: 'Smartphone X',
-      description: 'Latest generation smartphone',
-      price: 699.99,
-      stock: 50,
-      // Add other required fields for your Product model
-    },
-  });
-
-  const product2 = await prisma.product.upsert({
-    where: { id: 102 },
-    update: {},
-    create: {
-      id: 102,
-      name: 'Laptop Pro',
-      description: 'High-performance laptop for professionals',
-      price: 1299.99,
-      stock: 25,
-      // Add other required fields
-    },
-  });
-
-  const product3 = await prisma.product.upsert({
-    where: { id: 103 },
-    update: {},
-    create: {
-      id: 103,
-      name: 'Wireless Earbuds',
-      description: 'Noise-cancelling wireless earbuds',
-      price: 149.99,
-      stock: 100,
-      // Add other required fields
-    },
-  });
-
-  const product4 = await prisma.product.upsert({
-    where: { id: 104 },
-    update: {},
-    create: {
-      id: 104,
-      name: 'USB-C Charger',
-      description: 'Fast charging wall adapter',
-      price: 29.99, // Example price
-      stock: 200,
-      // Add other required fields
-    },
-  });
-
-  console.log('Created products:', { product1, product2, product3, product4 });
-
-  // --- Orders (Now use the created product IDs) ---
-  const order1 = await prisma.order.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      id: 1,
-      customerId: alice.id,
-      productId: product1.id, // Use actual product ID
-      total: 699.99,
-      status: 'Shipped',
-    },
-  });
-
-  const order2 = await prisma.order.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      id: 2,
-      customerId: bob.id,
-      productId: product2.id, // Use actual product ID
-      total: 1299.99,
-      status: 'Processing',
-    },
-  });
-
-  const order3 = await prisma.order.upsert({
-    where: { id: 3 },
-    update: {},
-    create: {
-      id: 3,
-      customerId: alice.id,
-      productId: product3.id, // Use actual product ID
-      total: 149.99,
-      status: 'Delivered',
-    },
-  });
-
-  const order4 = await prisma.order.upsert({
-    where: { id: 4 },
-    update: {},
-    create: {
-      id: 4,
-      customerId: charlie.id,
-      productId: product1.id, // Use actual product ID
-      total: 699.99,
-      status: 'Pending',
-    },
-  });
-
-  const order5 = await prisma.order.upsert({
-    where: { id: 5 },
-    update: {},
-    create: {
-      id: 5,
-      customerId: diana.id,
-      productId: product4.id, // Use actual product ID (updated from 104)
-      total: 29.99, // Should match product price, adjust if needed
-      status: 'Shipped',
-    },
-  });
-
-  console.log('Created orders:', { order1, order2, order3, order4, order5 });
-
-  // --- Support Tickets ---
-  const ticket1 = await prisma.supportTicket.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      id: 1,
-      customerId: bob.id,
-      issue: 'Laptop screen flickering after update.',
-      status: 'Open',
-    },
-  });
-
-  const ticket2 = await prisma.supportTicket.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      id: 2,
-      customerId: alice.id,
-      issue: 'Wrong item delivered for order #3.',
-      status: 'Resolved',
-    },
-  });
-
-  const ticket3 = await prisma.supportTicket.upsert({
-    where: { id: 3 },
-    update: {},
-    create: {
-      id: 3,
-      customerId: diana.id,
-      issue: 'Cannot connect wireless earbuds to phone.',
-      status: 'In Progress',
-    },
-  });
-
-  const ticket4 = await prisma.supportTicket.upsert({
-    where: { id: 4 },
-    update: {},
-    create: {
-      id: 4,
-      customerId: charlie.id,
-      issue: 'Inquiry about return policy for order #4.',
-      status: 'Open',
-    },
-  });
-
-  console.log('Created support tickets:', { ticket1, ticket2, ticket3, ticket4 });
-
-  console.log('Seeding finished.');
+  // --- Verify data ---
+  const userCount = await prisma.user.count();
+  const productCount = await prisma.product.count();
+  
+  console.log(`Seed complete: ${userCount} users, ${productCount} products`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
   });

@@ -146,9 +146,9 @@ export function ReturnCard({
 
   // Show return options selection
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden shadow-sm">
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden shadow-sm" data-testid="return-card">
       {/* Header */}
-      <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
+      <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50" data-testid="return-card-header">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -190,7 +190,7 @@ export function ReturnCard({
       </div>
 
       {/* Options */}
-      <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
+      <div className="divide-y divide-zinc-200 dark:divide-zinc-700" data-testid="return-card-options">
         {options.map((option) => (
           <button
             key={option.method}
@@ -201,6 +201,7 @@ export function ReturnCard({
             className="w-full p-4 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
             type="button"
             aria-label={`Select ${option.label} option`}
+            data-testid={`return-option-${option.method}`}
           >
             <div className="flex justify-between items-start gap-4">
               <div className="flex-grow">

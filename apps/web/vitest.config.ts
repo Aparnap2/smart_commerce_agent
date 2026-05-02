@@ -12,7 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'lib/**/__tests__/**/*.test.ts', 'lib/**/__tests__/**/*.test.tsx'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'lib/**/__tests__/**/*.test.ts', 'lib/**/__tests__/**/*.test.tsx', '__tests__/components/**/*.test.tsx', '__tests__/pages/**/*.test.tsx', 'prisma/tests/**/*.test.ts'],
     globals: true,
     setupFiles: ['./tests/setup-env.ts'],
   },

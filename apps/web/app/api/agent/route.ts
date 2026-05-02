@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { chatRateLimit } from '@/lib/security/ratelimit'
 
 export const runtime = 'nodejs'
 
@@ -10,6 +11,21 @@ export async function POST(req: NextRequest) {
 
   if (!userId) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const limit = await chatRateLimit(userId)
+  if (!limit.allowed) {
+    return Response.json(
+      { error: 'Rate limit exceeded. Try again shortly.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Remaining': String(limit.remaining),
+          'X-RateLimit-Reset':     String(limit.resetAt),
+          'Retry-After': String(limit.resetAt - Math.floor(Date.now() / 1000)),
+        },
+      }
+    )
   }
 
   let body: unknown

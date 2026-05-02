@@ -1,21 +1,60 @@
 # Langfuse — Optional observability service
 # Run separately: docker compose -f docker-compose.langfuse.yml up -d
-# High memory usage (~400MB) — only start when needed
-
-version: '3.9'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart-commerce-langfuse-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langfuse
+    ports:
+      - "5433:5432"
+    volumes:
+      - langfuse_db:/var/lib/postgresql/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8-alpine
+    container_name: smart-commerce-clickhouse
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   langfuse:
     image: langfuse/langfuse:latest
     container_name: smart-commerce-langfuse
+    depends_on:
+      postgres:
+        condition: service_started
+      clickhouse:
+        condition: service_started
     environment:
-      DATABASE_URL:      postgresql://postgres:postgres@host.docker.internal:5432/langfuse
-      NEXTAUTH_SECRET:   ${LANGFUSE_NEXTAUTH_SECRET:-dev-secret}
-      NEXTAUTH_URL:      http://localhost:3003
-      TELEMETRY_ENABLED: "false"
+      DATABASE_URL:        postgresql://postgres:postgres@postgres:5432/langfuse
+      CLICKHOUSE_URL:      clickhouse://clickhouse:8123/langfuse
+      CLICKHOUSE_USER:     default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:8123/langfuse
+      NEXTAUTH_SECRET:     ${LANGFUSE_NEXTAUTH_SECRET:-dev-secret}
+      NEXTAUTH_URL:        http://localhost:3003
+      TELEMETRY_ENABLED:   "false"
     ports:
       - "3003:3000"
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
+
+volumes:
+  clickhouse_data:
+  langfuse_db:

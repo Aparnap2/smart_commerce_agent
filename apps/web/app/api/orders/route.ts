@@ -22,11 +22,15 @@ export async function GET() {
 
         const orders = await prisma.order.findMany({
             where: { customerId: customer.id },
-            include: {
-                product: true,
-            },
             orderBy: { orderDate: 'desc' },
         });
+
+        // Fetch products for each order
+        const orderIds = orders.map(o => o.productId).filter(Boolean);
+        const products = await prisma.product.findMany({
+            where: { id: { in: orderIds } },
+        });
+        const productMap = new Map(products.map(p => [p.id, p]));
 
         // Map Prisma models to the expected OrderData type if necessary
         const formattedOrders = orders.map(order => ({
@@ -34,16 +38,16 @@ export async function GET() {
             orderNumber: order.trackingNumber || `ORD-${order.id}`,
             status: order.status,
             total: order.total,
-            subtotal: order.total, // Simplified
+            subtotal: order.total,
             tax: 0,
             shipping: 0,
             items: [
                 {
                     id: String(order.productId),
-                    name: order.product.name,
+                    name: productMap.get(order.productId)?.name || 'Unknown',
                     quantity: order.quantity,
-                    price: order.product.price,
-                    sku: order.product.sku || '',
+                    price: productMap.get(order.productId)?.price || 0,
+                    sku: productMap.get(order.productId)?.sku || '',
                 }
             ],
             createdAt: order.orderDate.toISOString(),

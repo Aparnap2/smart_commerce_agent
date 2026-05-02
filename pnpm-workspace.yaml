@@ -10,3 +10,5 @@ ignoredBuiltDependencies:
   - prisma
   - sharp
   - unrs-resolver
+
+nodeLinker: hoisted

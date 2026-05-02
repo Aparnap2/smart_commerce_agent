@@ -59,29 +59,29 @@ Deploy the Smart Commerce Agent to **$0** using serverless infrastructure.
 
 Go to Vercel Dashboard > Settings > Environment Variables:
 
-| Variable                | Value                                            | Type   |
-|-------------------------|--------------------------------------------------|--------|
-| `DATABASE_URL`          | `postgresql://...@ep-xxx.neon.tech/...`         | Secret |
-| `CHECKPOINT_TYPE`       | `postgres`                                       | Plain  |
-| `LANGFUSE_PUBLIC_KEY`   | `pl_...`                                         | Secret |
-| `LANGFUSE_SECRET_KEY`   | `sk_...`                                         | Secret |
-| `LANGFUSE_BASE_URL`     | `https://cloud.langfuse.com`                     | Plain  |
-| `OLLAMA_BASE_URL`       | `https://your-ollama-instance.com`   | Plain  |
-| `OLLAMA_MODEL`          | `qwen2.5-coder:3b`                   | Plain  |
+| Variable | Value | Type |
+|---------|-------|------|
+| `DATABASE_URL` | `postgresql://...@ep-xxx.neon.tech/...` | Secret |
+| `CHECKPOINT_TYPE` | `postgres` | Plain |
+| `LANGFUSE_PUBLIC_KEY` | `pl_...` | Secret |
+| `LANGFUSE_SECRET_KEY` | `sk_...` | Secret |
+| `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` | Plain |
+| `OLLAMA_BASE_URL` | `https://your-ollama-instance.com` | Plain |
+| `OLLAMA_MODEL` | `qwen2.5-coder:3b` | Plain |
 
 ### Render Environment Variables
 
 Go to Render Dashboard > Your Service > Environment:
 
-| Variable                | Value                 |
-|-------------------------|-----------------------|
-| `DATABASE_URL`          | (Same as Vercel)      |
-| `CHECKPOINT_TYPE`       | `postgres`            |
-| `LANGFUSE_PUBLIC_KEY`   | (Same as Vercel)      |
-| `LANGFUSE_SECRET_KEY`   | (Same as Vercel)      |
-| `LANGFUSE_BASE_URL`     | `https://cloud.langfuse.com` |
-| `OLLAMA_BASE_URL`       | `https://your-ollama-instance.com` |
-| `OLLAMA_MODEL`          | `qwen2.5-coder:3b`    |
+| Variable | Value |
+|---------|-------|
+| `DATABASE_URL` | (Same as Vercel) |
+| `CHECKPOINT_TYPE` | `postgres` |
+| `LANGFUSE_PUBLIC_KEY` | (Same as Vercel) |
+| `LANGFUSE_SECRET_KEY` | (Same as Vercel) |
+| `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` |
+| `OLLAMA_BASE_URL` | `https://your-ollama-instance.com` |
+| `OLLAMA_MODEL` | `qwen2.5-coder:3b` |
 
 ---
 
@@ -122,11 +122,11 @@ Click "Deploy" - Vercel will automatically:
 
 ### 4.2 Configure Build
 
-| Setting        | Value                            |
-|----------------|----------------------------------|
-| Build Command  | `pnpm install && pnpm build`     |
-| Start Command  | `pnpm start`                     |
-| Plan           | Free                             |
+| Setting | Value |
+|---------|-------|
+| Build Command | `pnpm install && pnpm build` |
+| Start Command | `pnpm start` |
+| Plan | Free |
 
 ### 4.3 Environment Variables
 
@@ -184,15 +184,15 @@ Ensure `CHECKPOINT_TYPE=postgres` is set and `DATABASE_URL` is correct.
 
 ## Cost Summary
 
-| Service         | Free Tier                                  | Cost |
-|-----------------|--------------------------------------------|------|
-| Vercel          | 100GB bandwidth, serverless functions     | $0   |
-| Render          | 750 hours/month                            | $0   |
-| Neon            | 100GB storage, 100 connections            | $0   |
-| Langfuse        | 50,000 traces/month                        | $0   |
-| Qdrant Cloud    | 1 cluster, 1GB storage                     | $0   |
+| Service | Free Tier | Cost |
+|---------|----------|------|
+| Vercel | 100GB bandwidth, serverless functions | $0 |
+| Render | 750 hours/month | $0 |
+| Neon | 100GB storage, 100 connections | $0 |
+| Langfuse | 50,000 traces/month | $0 |
+| Qdrant Cloud | 1 cluster, 1GB storage | $0 |
 
-### Total Monthly Cost: $0
+## Total Monthly Cost: $0
 
 ---
 
