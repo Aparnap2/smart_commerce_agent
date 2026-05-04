@@ -63,26 +63,30 @@ async def stream_chat(body: StreamRequest):
     from db.client import get_pool
     pool = await get_pool()
     department_id = None
+    user_role = "EMPLOYEE"
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            'SELECT "departmentId" FROM users WHERE email = $1', body.user_id
+            'SELECT "departmentId", "employeeRole" FROM users WHERE email = $1', body.user_id
         )
         if user:
             department_id = user["departmentId"]
+            user_role = user.get("employeeRole", "EMPLOYEE")
 
     config = {
         "configurable": {
             "user_id": body.user_id,
             "thread_id": body.thread_id,
             "department_id": department_id,
+            "role": user_role,
         }
     }
-    logger.info(f"Department lookup: user={body.user_id}, dept_id={department_id}")
+    logger.info(f"Department lookup: user={body.user_id}, dept_id={department_id}, role={user_role}")
 
     stream = graph.astream(
         {
             "messages": lc_messages,
             "user_id": body.user_id,
+            "user_role": user_role,
             "step_count": 0,
         },
         config=config,
