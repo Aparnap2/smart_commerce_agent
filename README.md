@@ -1,11 +1,11 @@
-# TechTrend Agentic Commerce Platform
+# ProcureAI - B2B Internal Procurement Platform
 
 [![Tests](https://img.shields.io/badge/tests-307%20total-green)]()
 [![Pass Rate](https://img.shields.io/badge/pass%20rate-100%25-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/types-strict-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
 
-> **Production-grade agentic e-commerce CX platform** — AI agents handle product discovery, cart management, checkout, order tracking, and support via natural language + Generative UI components.
+> **Production-grade B2B internal procurement platform** — AI agents handle purchase requests, manager approvals, budget tracking, and procurement support via natural language + Generative UI components.
 
 ---
 
@@ -14,7 +14,7 @@
 | Principle | Description | Implementation |
 |-----------|-------------|----------------|
 | **AGENT-FIRST** | Every user action is a conversation turn, not page navigation | LangGraph supervisor routes 14 intent types to specialized agents |
-| **FAIL-SAFE** | Every write requires confirmation, every tool is idempotent | Idempotency keys in Redis, human-in-the-loop for refunds |
+| **FAIL-SAFE** | Every PR requires manager approval, every tool is idempotent | Idempotency keys in Redis, audit trail for all state changes |
 | **STATELESS COMPUTE** | Container Apps scale to zero, state in PostgreSQL + Redis only | Azure Container Apps, Prisma migrations, Redis checkpoints |
 | **OBSERVABLE BY DEFAULT** | Every agent turn traced in Langfuse | Per-span tracing, LLM-as-Judge scoring, RAGAS metrics |
 
@@ -31,7 +31,7 @@
 │  │  apps/web/ → Next.js 15 Chat-First Canvas (no navigation tabs)      │    │
 │  │  - Shell using 100dvh CSS Grid (Rail + Chat Column)                 │    │
 │  │  - Virtualized anchor scroll for high-performance streaming         │    │
-│  │  - Generative UI components (ProductGrid, CartCanvas, OrderTimeline)│    │
+│  │  - Generative UI components (CatalogGrid, PRDraft, PRHistory)        │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -136,6 +136,35 @@
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌──────────────┐      ┌──────────────┐      ┌────────────┐│
+│  │ Employee     │◄─────│ PurchaseOrder│─────►│ POItem     ││
+│  │ - id         │      │ - id         │      │ - id       ││
+│  │ - email      │      │ - employeeId │      │ - poId     ││
+│  │ - name       │      │ - total      │      │ - itemId   ││
+│  │ - department │      │ - status     │      │ - quantity ││
+│  │ - managerId  │      │ - approval   │      └────────────┘│
+│  └──────────────┘      │ - embeddings │                     │
+│         │              └──────────────┘                     │
+│         │                       │                           │
+│         ▼                       ▼                           │
+│  ┌──────────────┐      ┌──────────────┐      ┌────────────┐│
+│  │ SupportTicket│      │ CatalogItem  │      │ PRDraft    ││
+│  │ - id         │      │ - id         │      │ - id       ││
+│  │ - employeeId │      │ - name       │      │ - employeeId││
+│  │ - status     │      │ - price      │      │ - items    ││
+│  │ - sentiment  │      │ - embeddings │      │ - total    ││
+│  └──────────────┘      │ - category   │      │ - budgetId ││
+│                        └──────────────┘      └────────────┘│
+│                                                              │
+│  Vector Tables (pgvector 1536-dim):                          │
+│  - catalog_embeddings (HNSW index)                          │
+│  - document_chunks (GIN + vector)                           │
+└──────────────────────────────────────────────────────────────┘
+```
+┌──────────────────────────────────────────────────────────────┐
+│                   POSTGRESQL SCHEMA                           │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐      ┌──────────────┐      ┌────────────┐│
 │  │ Customer     │◄─────│ Order        │─────►│ OrderItem  ││
 │  │ - id         │      │ - id         │      │ - id       ││
 │  │ - email      │      │ - customerId │      │ - orderId  ││
@@ -162,6 +191,40 @@
 
 ### Tier 5: Request Lifecycle
 
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    CONVERSATION TURN FLOW                                 │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  1. User Message                                                         │
+│     │                                                                    │
+│     ▼                                                                    │
+│  2. classify_intent (LLM) ──→ Intent: pr_create                           │
+│     │                               Entities: ["laptop", "3 units"]       │
+│     │                               Sentiment: neutral                   │
+│     ▼                                                                    │
+│  3. shouldUseTools? ──→ YES                                              │
+│     │                                                                    │
+│     ▼                                                                    │
+│  4. generate_tool_calls ──→ [catalog.search(query="laptop"),             │
+│                              budget.check(department="engineering")]      │
+│     │                                                                    │
+│     ▼                                                                    │
+│  5. tools (ToolNode) ──→ Prisma query → 8 items                          │
+│     │                               Redis cache set (5min)               │
+│     ▼                                                                    │
+│  6. generate_response (LLM) ──→ "Found 8 laptops in catalog..."          │
+│     │                                + GenUI: <CatalogGrid items={8}/>  │
+│     ▼                                                                    │
+│  7. Stream via SSE ──→ Client renders message + component                │
+│     │                                                                    │
+│     ▼                                                                    │
+│  8. Langfuse Trace ──→ Span: classify (234ms)                            │
+│                        Span: tools (89ms)                                │
+│                        Span: generate (1.2s)                            │
+│                        Score: faithfulness=0.92                          │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                    CONVERSATION TURN FLOW                                 │
@@ -239,8 +302,8 @@
 │                          ▼                                   │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │  Layer 2: Authorization                                 │ │
-│  │  - Role-based (customer, merchant, support, admin)      │ │
-│  │  - Resource-level (userId checks on every write)        │ │
+│  │  - Role-based (employee, manager, procurement, admin)    │ │
+│  │  - Resource-level (userId + department checks)          │ │
 │  │  - Idempotency keys (prevent replay)                    │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                          │                                   │
@@ -270,6 +333,77 @@
 │  └────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## B2B Procurement Workflow
+
+### Purchase Request (PR) Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PURCHASE REQUEST LIFECYCLE                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────┐    ┌─────────┐    ┌──────────┐    ┌─────────┐           │
+│  │ PRDraft │───►│ Submitted│───►│ Pending  │───►│ Approved│           │
+│  │         │    │          │    │ Approval │    │         │           │
+│  └─────────┘    └─────────┘    └──────────┘    └─────────┘           │
+│       │               │               │               │                │
+│       ▼               ▼               ▼               ▼                │
+│  - Employee       - Manager       - Budget        - PO Created         │
+│    adds items      notified       check                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Approval Routing
+
+| Role | Permissions |
+|------|-------------|
+| **Employee** | Create PR, view own PRs, cancel draft |
+| **Manager** | Approve/reject PRs for direct reports |
+| **Procurement** | Approve high-value PRs, manage vendors |
+| **Admin** | All permissions, manage departments |
+
+- Single approver per department (employee's manager)
+- Auto-escalation after 48h to department head
+- Approval via chat or dashboard
+
+### Budget Management
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    BUDGET TRACKING                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Department Budget:                                           │
+│  - monthlyLimit: $50,000                                      │
+│  - spentThisMonth: $12,500                                    │
+│  - pendingApproval: $8,000                                    │
+│  - available: $29,500                                         │
+│                                                                 │
+│  PR Approval Logic:                                            │
+│  - <$1,000: Auto-approved                                      │
+│  - $1,000-$10,000: Manager approval                           │
+│  - >$10,000: Manager + Procurement sign-off                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Notification System (Redis Pub/Sub)
+
+| Event | Channel | Subscribers |
+|-------|---------|-------------|
+| PR Submitted | `pr:{department}:new` | Manager |
+| PR Approved | `pr:{employee}:approved` | Employee |
+| PR Rejected | `pr:{employee}:rejected` | Employee |
+| Budget Alert | `budget:{department}:alert` | Procurement |
+| PO Created | `po:{vendor}:created` | Procurement |
+
+- Redis pub/sub for real-time notifications
+- WebSocket fallback for offline employees
+- Email digest for summary (configurable)
 
 ---
 
@@ -644,10 +778,10 @@ make prune             # Docker system prune
 | Playwright | `apps/web/tests/e2e/` | `pnpm test:e2e` | Screenshots, videos |
 
 **Test Scenarios**:
-1. **Product Discovery**: Search → View results → Add to cart
-2. **Cart Management**: Add → Update quantity → Remove → Clear
-3. **Checkout Flow**: Start checkout → Payment → Order confirmation
-4. **Order Tracking**: View orders → Track status
+1. **Catalog Search**: Search → View results → Add to PR draft
+2. **PR Draft Management**: Add items → Update quantity → Remove → Submit
+3. **Approval Flow**: Submit PR → Manager approval → Budget check → PO created
+4. **PR History**: View PRs → Track approval status
 5. **Support Ticket**: Create ticket → Agent response → Resolution
 
 **Target Metrics**:
@@ -854,14 +988,14 @@ make db-studio  # Open Prisma Studio
 **Minute 2-4: Live Agent Demo**
 ```
 1. Open http://localhost:3000
-2. User query: "Find wireless headphones under $200"
+2. User query: "Find laptops under $2000 for engineering dept"
 3. Show agent response:
-   - Intent classification (product_search)
-   - Entity extraction (category: headphones, maxPrice: 200)
-   - Tool execution (catalog.search)
-   - GenUI render (<ProductGrid />)
-4. Add product to cart via chat
-5. Show cart update in real-time
+   - Intent classification (pr_create)
+   - Entity extraction (item: laptop, budget: 2000, dept: engineering)
+   - Tool execution (catalog.search + budget.check)
+   - GenUI render (<CatalogGrid />)
+4. Add item to PR draft via chat
+5. Show PR draft update in real-time
 ```
 
 **Minute 4-5: Observability**
@@ -911,12 +1045,12 @@ make e2e-test
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **Frontend** | Next.js 15, React 19, shadcn/ui, CopilotKit | Chat-first canvas, GenUI components |
-| **Commerce API** | Hono + Bun, GraphQL Yoga, Prisma JS | Data access layer, MCP endpoints |
+| **Procurement API** | Hono + Bun, GraphQL Yoga, Prisma JS | Data access layer, MCP endpoints |
 | **Agent Core** | FastAPI + Python, LangGraph, Azure OpenAI | Multi-agent orchestration |
 | **LLM** | Azure AI Foundry (gpt-oss-120b) | Intent classification, response generation |
 | **Embeddings** | text-embedding-3-small (1536-dim) | Semantic search, RAG |
 | **Database** | PostgreSQL 16 + pgvector | Primary data store, vector search |
-| **Cache** | Redis 7 | Session storage, checkpoints, rate limiting |
+| **Cache** | Redis 7 | Session storage, checkpoints, pub/sub notifications |
 | **Observability** | Langfuse | Tracing, scoring, dashboards |
 
 ---
@@ -983,7 +1117,7 @@ vercel-ai-sdk/
 
 ## License
 
-MIT © 2026 TechTrend Agentic Commerce Platform
+MIT © 2026 ProcureAI B2B Platform
 
 ---
 
