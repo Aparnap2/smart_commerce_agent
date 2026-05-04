@@ -99,10 +99,20 @@ def get_llm() -> ChatOpenAI:
     return _llm
 
 
+def get_langfuse() -> "Langfuse | None":
+    """Get Langfuse instance for tracing. Returns None if not available."""
+    return _langfuse
+
+
 def get_langfuse_metadata(config: dict = None) -> dict:
     """Get Langfuse metadata from config for tracing (PRD Part 9)."""
     if not config:
         return {"app": "procureai"}
+    
+    # Handle non-dict config - return default app only
+    if not isinstance(config, dict):
+        return {"app": "procureai"}
+    
     cfg = config.get("configurable", {}) if isinstance(config, dict) else {}
     return {
         "department_id": cfg.get("department_id", "unknown"),
