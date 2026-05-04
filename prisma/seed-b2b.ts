@@ -82,6 +82,7 @@ async function main() {
       vendor:      'Apple India Pvt Ltd',
       vendorCode:  'Z14A-MBP-M4-24-512',
       leadDays:    7,
+      searchVector: 'MacBook Pro M4 14 Apple M4 Pro 24GB RAM 512GB SSD laptop computer HW-APPLE-MBP14-M4 Z14A-MBP-M4-24-512',
     },
     {
       name:        'Dell UltraSharp 27" 4K Monitor',
@@ -92,6 +93,7 @@ async function main() {
       vendor:      'Dell India Pvt Ltd',
       vendorCode:  'U2723D',
       leadDays:    5,
+      searchVector: 'Dell UltraSharp 27 4K Monitor U2723D USB-C 90W IPS Black display monitor HW-DELL-U2723D U2723D',
     },
     {
       name:        'GitHub Enterprise (per seat/year)',
@@ -102,6 +104,7 @@ async function main() {
       vendor:      'GitHub Inc.',
       vendorCode:  'GHE-CLOUD-SEAT',
       leadDays:    1,
+      searchVector: 'GitHub Enterprise per seat year cloud licence software SW-GH-ENT-SEAT GHE-CLOUD-SEAT',
     },
     {
       name:        'Figma Professional (per seat/year)',
@@ -112,6 +115,7 @@ async function main() {
       vendor:      'Figma Inc.',
       vendorCode:  'FIG-PRO-ANNUAL',
       leadDays:    1,
+      searchVector: 'Figma Professional per seat year plan design software SW-FIGMA-PRO-SEAT FIG-PRO-ANNUAL',
     },
     {
       name:        'AWS Business Support (per month)',
@@ -122,6 +126,7 @@ async function main() {
       vendor:      'Amazon Web Services',
       vendorCode:  'SUPP-BIZ-MO',
       leadDays:    1,
+      searchVector: 'AWS Business Support per month cloud infrastructure Amazon Web Services SVC-AWS-BIZ-MO SUPP-BIZ-MO',
     },
     {
       name:        'Herman Miller Aeron Chair',
@@ -132,6 +137,7 @@ async function main() {
       vendor:      'Herman Miller India',
       vendorCode:  'AERON-B-GRP',
       leadDays:    14,
+      searchVector: 'Herman Miller Aeron Chair Size B Graphite fully adjustable office furniture OFC-HM-AERON-B AERON-B-GRP',
     },
     {
       name:        'Notion Team (per seat/year)',
@@ -142,6 +148,7 @@ async function main() {
       vendor:      'Notion Labs Inc.',
       vendorCode:  'NOTION-TEAM-ANNUAL',
       leadDays:    1,
+      searchVector: 'Notion Team per seat year plan workspace collaboration software SW-NOTION-TEAM-SEAT NOTION-TEAM-ANNUAL',
     },
   ]
 
