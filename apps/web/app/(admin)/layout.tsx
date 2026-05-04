@@ -7,9 +7,9 @@ export default async function AdminLayout({
   children
 }: { children: ReactNode }) {
   const session = await getServerSession(authOptions)
-  if (!session?.user) redirect('/auth/signin')
+  if (!session?.user) redirect('/auth/login')
   if (session.user.role !== 'MERCHANT') {
-    redirect('/chat-dashboard')
+    redirect('/chat')
   }
   return <>{children}</>
 }

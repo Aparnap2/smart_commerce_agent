@@ -19,19 +19,21 @@ export default function LoginPage() {
     setError(null);
 
     try {
+      // Redirect based on email pattern - manager emails contain 'manager'
+      const isManager = email.toLowerCase().includes('manager');
+      const callbackUrl = isManager ? '/admin/chat' : '/chat';
+
       const result = await signIn('credentials', {
         email,
         password,
-        redirect: false,
+        redirect: true,
+        callbackUrl,
       });
 
+      // If redirect=false (shouldn't happen with above), handle manually
       if (result?.error) {
         setError("Invalid email or password");
         toast.error("Invalid email or password");
-      } else {
-        toast.success("Signed in successfully!");
-        router.push('/');
-        router.refresh();
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -59,6 +61,7 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form
+          method="POST"
           onSubmit={handleLogin}
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700"
         >
@@ -83,6 +86,7 @@ export default function LoginPage() {
               </div>
               <input
                 id="email"
+                name="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -108,6 +112,7 @@ export default function LoginPage() {
               </div>
               <input
                 id="password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -132,6 +137,7 @@ export default function LoginPage() {
           {/* Submit Button */}
           <button
             type="submit"
+            data-testid="login-submit"
             disabled={loading}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
           >

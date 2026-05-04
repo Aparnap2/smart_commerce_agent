@@ -102,7 +102,7 @@ export function EmptyState({ onSend }: EmptyStateProps) {
         {/* Greeting Section */}
         <div className="space-y-3">
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            👋 Hi! I'm your TechTrend shopping assistant.
+            👋 Hi! I'm your ProcureAI procurement assistant.
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400 text-sm md:text-base leading-relaxed">
             I can help you find products, manage your cart,

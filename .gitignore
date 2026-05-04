@@ -52,3 +52,4 @@ next-env.d.ts
 *.test-results.xml
 *.lcov
 .next/
+.venv/

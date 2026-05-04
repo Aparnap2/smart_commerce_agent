@@ -41,7 +41,7 @@ export default function MerchantChatPage() {
   return (
     <div className="flex flex-col h-screen bg-zinc-950">
       <div className="border-b border-zinc-800 px-4 py-3 flex items-center gap-3 shrink-0">
-        <h1 className="text-sm font-semibold text-zinc-100">TechTrend Operations</h1>
+        <h1 className="text-sm font-semibold text-zinc-100">ProcureAI Operations</h1>
         <span className="text-xs text-zinc-500">Merchant Dashboard</span>
       </div>
 

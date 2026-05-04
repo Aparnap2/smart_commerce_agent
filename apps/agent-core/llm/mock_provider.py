@@ -3,10 +3,11 @@ Mock LLM Provider for E2E Testing
 Returns canned responses for testing the UI flow
 """
 
-from typing import Any, Optional, AsyncIterator
+from typing import Any, Optional, AsyncIterator, Sequence
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatResult, ChatGenerationChunk
+from langchain_core.tools import BaseTool
 
 
 class MockChatModel(BaseChatModel):
@@ -60,6 +61,27 @@ class MockChatModel(BaseChatModel):
                 message=AIMessageChunk(content=chunk_text),
             )
     
+    def _generate_with_tools(self, messages: list[BaseMessage]) -> ChatResult:
+        """Generate a response that includes tool calls for testing"""
+        last_message = messages[-1].content if messages else ""
+        user_input_lower = last_message.lower()
+        
+        # If user asks for laptop, trigger search_products tool
+        if "laptop" in user_input_lower or "new hire" in user_input_lower:
+            from langchain_core.messages import AIMessage
+            ai_msg = AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "search_products",
+                    "args": {"query": "laptop", "category": None, "brand": None, "min_price": None, "max_price": None, "in_stock_only": True},
+                    "id": "mock-call-1"
+                }]
+            )
+            return ChatResult(generations=[ChatGeneration(message=ai_msg)])
+        
+        # Default response
+        return self._generate(messages)
+
     def _get_response(self, user_input: str) -> str:
         """Return canned response based on input keywords"""
         user_input_lower = user_input.lower()
@@ -143,6 +165,11 @@ What would you like to do today?'''
     @property
     def _identifying_params(self) -> dict[str, Any]:
         return {"model_name": self.model_name}
+
+    def bind_tools(self, tools: Sequence[BaseTool], **kwargs: Any) -> "MockChatModel":
+        """Bind tools to the model - returns self for mock purposes"""
+        # Return a copy with tools bound (mock just returns self since we don't actually call tools)
+        return self
 
 
 def get_llm(temperature: float = 0.1) -> MockChatModel:

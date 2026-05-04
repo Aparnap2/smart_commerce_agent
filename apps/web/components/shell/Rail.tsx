@@ -28,9 +28,9 @@ export const Rail: React.FC = () => {
             <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
                 <h2 className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2 overflow-hidden whitespace-nowrap">
                     <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center shrink-0">
-                        <span className="text-white text-xs">TT</span>
+                        <span className="text-white text-xs">PA</span>
                     </div>
-                    <span className="text-lg hidden md:block lg:block">TechTrend</span>
+                    <span className="text-lg hidden md:block lg:block">ProcureAI</span>
                 </h2>
                 <button className="hidden md:block lg:block p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-gray-400 shrink-0">
                     <ChevronLeft size={18} />
@@ -93,7 +93,7 @@ export const Rail: React.FC = () => {
                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                             {session?.user?.name || 'Aparna'}
                         </p>
-                        <p className="text-[10px] text-gray-500 truncate">Pro Member</p>
+                        <p className="text-[10px] text-gray-500 truncate">{session?.user?.role || 'Employee'}</p>
                     </div>
                     <button className="ml-auto p-1.5 text-gray-400 hover:text-gray-600 hidden md:block lg:block shrink-0">
                         <Settings size={18} />

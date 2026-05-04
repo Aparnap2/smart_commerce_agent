@@ -1,7 +1,25 @@
 'use client';
 
 import { SessionProvider } from "next-auth/react";
-import { ReactNode } from "react";
+import { ReactNode, createContext, useContext } from "react";
+import { usePRNotifications } from "@/hooks/usePRNotifications";
+
+const NotificationsContext = createContext<ReturnType<typeof usePRNotifications> | null>(null);
+
+export function useNotifications() {
+  const ctx = useContext(NotificationsContext);
+  if (!ctx) throw new Error('useNotifications must be used within NotificationsProvider');
+  return ctx;
+}
+
+function NotificationsProvider({ children }: { children: ReactNode }) {
+  const notifications = usePRNotifications();
+  return (
+    <NotificationsContext.Provider value={notifications}>
+      {children}
+    </NotificationsContext.Provider>
+  );
+}
 
 /**
  * AuthProvider component - wraps the app to provide NextAuth session state
@@ -9,7 +27,9 @@ import { ReactNode } from "react";
 export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
-      {children}
+      <NotificationsProvider>
+        {children}
+      </NotificationsProvider>
     </SessionProvider>
   );
 }

@@ -33,7 +33,7 @@ export default function CustomerChatPage() {
   } else {
     // Production mode - enforce auth
     if (status === 'loading') return null
-    if (status === 'unauthenticated') redirect('/auth/signin')
+    if (status === 'unauthenticated') redirect('/auth/login')
     if (session?.user?.role === 'MERCHANT') redirect('/admin/chat')
   }
 
@@ -74,7 +74,7 @@ export default function CustomerChatPage() {
       <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
         <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">T</div>
         <div>
-          <div className="font-semibold text-gray-900 text-sm">TechTrend Assistant</div>
+          <div className="font-semibold text-gray-900 text-sm">ProcureAI Assistant</div>
           <div className="text-xs text-green-500">Online</div>
         </div>
       </div>
@@ -155,6 +155,7 @@ export default function CustomerChatPage() {
       {/* Input */}
       <div className="bg-white border-t px-4 py-3 flex gap-3 items-end">
         <textarea
+          data-testid="chat-input"
           aria-label="Message input"
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -169,6 +170,7 @@ export default function CustomerChatPage() {
           className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 max-h-32 overflow-y-auto"
         />
         <button
+          data-testid="send-button"
           aria-label="Send message"
           onClick={() => sendMessage(input)}
           disabled={!input.trim() || thread.isLoading}
