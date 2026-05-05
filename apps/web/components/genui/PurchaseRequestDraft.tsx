@@ -1,30 +1,47 @@
 'use client'
 
 import React, { type FC } from 'react'
-import type { PRDraftProps } from '@/lib/ui-event-types'
 
-const PurchaseRequestDraft: FC<PRDraftProps> = ({ prNumber, lineItems, total, status }) => {
+interface LineItem {
+  id: string
+  name: string
+  quantity: number
+  unitPrice?: number | null
+  totalPrice?: number | null
+}
+
+interface Props {
+  prNumber?: string
+  lineItems?: LineItem[]
+  total?: number
+  status?: string
+}
+
+const PurchaseRequestDraft: FC<Props> = ({ prNumber, lineItems, total, status }) => {
+  const items = lineItems ?? []
+  const safeTotal = total ?? 0
+  
   return (
     <div data-testid="pr-draft" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Purchase Request Draft</h3>
         <span className="bg-gray-100 text-gray-700 text-xs font-medium px-2 py-1 rounded">
-          {prNumber}
+          {prNumber ?? 'New PR'}
         </span>
       </div>
 
-      {lineItems.length === 0 ? (
+      {items.length === 0 ? (
         <div className="text-gray-500 text-center py-4">No items added yet</div>
       ) : (
         <div className="space-y-2 mb-4">
-          {lineItems.map(item => (
+          {items.map(item => (
             <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-100">
               <div>
                 <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                <div className="text-xs text-gray-500">Qty: {item.quantity} × ₹{item.unitPrice.toLocaleString('en-IN')}</div>
+                <div className="text-xs text-gray-500">Qty: {item.quantity ?? 0} × ₹{item.unitPrice != null ? Number(item.unitPrice).toLocaleString('en-IN') : 'N/A'}</div>
               </div>
               <div className="text-sm font-semibold text-indigo-600">
-                ₹{item.totalPrice.toLocaleString('en-IN')}
+                ₹{item.totalPrice != null ? Number(item.totalPrice).toLocaleString('en-IN') : 'N/A'}
               </div>
             </div>
           ))}

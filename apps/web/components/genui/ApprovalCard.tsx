@@ -2,7 +2,28 @@
 
 import React, { useState } from 'react'
 import type { FC } from 'react'
-import type { ApprovalCardProps } from '@/lib/ui-event-types'
+
+interface LineItem {
+  id: string
+  name: string
+  quantity: number
+  totalPrice?: number | null
+}
+
+interface Props {
+  pr?: {
+    id?: string
+    prNumber?: string
+    status?: string
+    requestedBy?: string | null
+    department?: string
+    total?: number
+    lineItems?: LineItem[]
+    createdAt?: string
+  }
+  onApprove?: () => void
+  onReject?: () => void
+}
 
 const urgencyColors: Record<string, string> = {
   LOW: 'border-gray-300 text-gray-500',
@@ -11,28 +32,31 @@ const urgencyColors: Record<string, string> = {
   CRITICAL: 'border-red-500 text-red-600',
 }
 
-const ApprovalCard: FC<ApprovalCardProps> = ({
-  prId, prNumber, requestorName, totalAmount, lineItems, justification, urgency, threadId
-}) => {
+const ApprovalCard: FC<Props> = ({ pr, onApprove, onReject }) => {
   const [decision, setDecision] = useState<'APPROVED' | 'REJECTED' | null>(null)
   const [comments, setComments] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const safePr = pr ?? {}
+  const safeTotal = safePr.total ?? 0
+  const safeItems = safePr.lineItems ?? []
+  const safeRequestor = safePr.requestedBy ?? 'Unknown'
+
   const handleDecide = async (d: 'APPROVED' | 'REJECTED') => {
     setLoading(true)
-    // In real implementation, this would call the approval API
-    console.log('Approving:', { prId, decision: d, comments })
+    console.log('Approving:', { prId: safePr.id, decision: d, comments })
     setDecision(d)
     setLoading(false)
+    if (d === 'APPROVED') onApprove?.()
+    else onReject?.()
   }
 
   if (decision) {
     return (
-      <div data-testid="approval-decided" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{decision === 'APPROVED' ? '✅' : '❌'}</span>
-          <span className="font-medium">{prNumber} {decision.toLowerCase()}</span>
-        </div>
+      <div data-testid="approval-card" className="bg-green-50 border border-green-200 rounded-xl p-4">
+        <p className="text-green-800 font-medium">
+          {decision === 'APPROVED' ? '✓ Purchase request approved' : '✗ Purchase request rejected'}
+        </p>
       </div>
     )
   }
@@ -41,68 +65,60 @@ const ApprovalCard: FC<ApprovalCardProps> = ({
     <div data-testid="approval-card" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <div className="font-semibold text-gray-900">{prNumber}</div>
-          <div className="text-sm text-gray-500">from {requestorName}</div>
+          <h3 className="text-lg font-semibold text-gray-900">
+            Purchase Request #{safePr.prNumber ?? 'Pending'}
+          </h3>
+          <p className="text-sm text-gray-500">
+            Requested by {safeRequestor} • {safePr.department ?? 'N/A'}
+          </p>
         </div>
-        <div className={`border px-2 py-1 rounded text-xs font-medium ${urgencyColors[urgency]}`}>
-          {urgency}
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${urgencyColors[safePr.status ?? 'NORMAL']}`}>
+          {safePr.status ?? 'PENDING'}
+        </span>
+      </div>
+
+      {safeItems.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {safeItems.map(item => (
+            <div key={item.id} className="flex justify-between text-sm">
+              <span>{item.name} (×{item.quantity ?? 0})</span>
+              <span className="text-gray-900">
+                ₹{item.totalPrice != null ? Number(item.totalPrice).toLocaleString('en-IN') : '0'}
+              </span>
+            </div>
+          ))}
         </div>
-      </div>
-
-      <div className="mb-3">
-        <div className="text-xs font-medium text-gray-500 mb-1">Justification</div>
-        <div className="text-sm text-gray-700">{justification}</div>
-      </div>
-
-      <div className="mb-3">
-        <div className="text-xs font-medium text-gray-500 mb-1">Items ({lineItems.length})</div>
-        {lineItems.map((item, i) => (
-          <div key={i} className="flex justify-between text-sm py-1">
-            <span className="text-gray-700">{item.quantity} × {item.name}</span>
-            <span className="text-gray-900">₹{item.totalPrice.toLocaleString('en-IN')}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-between items-center pt-3 border-t border-gray-200 mb-3">
-        <span className="font-medium text-gray-600">Total</span>
-        <span className="text-lg font-bold text-indigo-600">₹{totalAmount.toLocaleString('en-IN')}</span>
-      </div>
-
-      {!threadId ? (
-        <div className="text-center text-gray-500 text-sm py-2">
-          ⏳ Waiting for employee to submit…
-        </div>
-      ) : (
-        <>
-          <textarea
-            data-testid="approval-comments"
-            className="w-full border border-gray-300 rounded-lg p-2 text-sm mb-3"
-            placeholder="Add a comment (optional)"
-            value={comments}
-            onChange={(e) => setComments(e.target.value)}
-            rows={2}
-          />
-          <div className="flex gap-2">
-            <button
-              data-testid="reject-pr-btn"
-              onClick={() => handleDecide('REJECTED')}
-              disabled={loading}
-              className="flex-1 border border-red-300 text-red-600 py-2 rounded-lg font-medium hover:bg-red-50 disabled:opacity-50"
-            >
-              ✕ Reject
-            </button>
-            <button
-              data-testid="approve-pr-btn"
-              onClick={() => handleDecide('APPROVED')}
-              disabled={loading}
-              className="flex-1 bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              ✓ Approve
-            </button>
-          </div>
-        </>
       )}
+
+      <div className="border-t pt-3 mb-4">
+        <span className="text-lg font-bold text-indigo-600">
+          ₹{safeTotal.toLocaleString('en-IN')}
+        </span>
+      </div>
+
+      <textarea
+        className="w-full border rounded-lg p-2 text-sm mb-3"
+        placeholder="Comments (optional)"
+        value={comments}
+        onChange={(e) => setComments(e.target.value)}
+      />
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => handleDecide('APPROVED')}
+          disabled={loading}
+          className="flex-1 bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
+        >
+          Approve
+        </button>
+        <button
+          onClick={() => handleDecide('REJECTED')}
+          disabled={loading}
+          className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50"
+        >
+          Reject
+        </button>
+      </div>
     </div>
   )
 }

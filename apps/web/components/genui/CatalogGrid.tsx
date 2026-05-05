@@ -1,7 +1,17 @@
 'use client'
 
 import React, { type FC } from 'react'
-import type { CatalogGridProps } from '@/lib/ui-event-types'
+
+export interface CatalogGridProps {
+  items?: Array<{
+    id: string
+    name: string
+    vendor?: string
+    unitPrice?: number | null
+    leadDays?: number
+  }>
+  loading?: boolean
+}
 
 const CatalogGrid: FC<CatalogGridProps> = ({ items, loading }) => {
   if (loading) {
@@ -35,11 +45,11 @@ const CatalogGrid: FC<CatalogGridProps> = ({ items, loading }) => {
           <div className="text-xs text-gray-500">Vendor: {item.vendor}</div>
 
           <div data-testid="item-price" className="text-base font-bold text-indigo-600">
-            ₹{item.unitPrice.toLocaleString('en-IN')}
+            ₹{item.unitPrice != null ? Number(item.unitPrice).toLocaleString('en-IN') : 'N/A'}
           </div>
 
           <div className="text-xs text-gray-500">
-            Lead time: {item.leadDays} days
+            Lead time: {item.leadDays ?? 'N/A'} days
           </div>
 
           <button 
