@@ -24,29 +24,54 @@ const BudgetGauge: FC<Props> = ({ department, spent = 0, total = 0, remaining = 
     return () => clearTimeout(timer)
   }, [safePercent])
 
-  const gaugeColor = safePercent < 70 ? 'bg-green-500' : safePercent < 90 ? 'bg-amber-500' : 'bg-red-500'
+  const getColor = () => {
+    if (safePercent >= 90) return { bg: 'bg-red-500', text: 'text-red-600', label: 'Critical' }
+    if (safePercent >= 70) return { bg: 'bg-amber-500', text: 'text-amber-600', label: 'Warning' }
+    return { bg: 'bg-emerald-500', text: 'text-emerald-600', label: 'Healthy' }
+  }
+
+  const color = getColor()
 
   return (
-    <div data-testid="budget-gauge" className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-gray-900">{department ?? 'Department'} Budget</span>
-        <span className="text-sm text-gray-500">{safePercent.toFixed(1)}% used</span>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">{department ?? 'Department'}</h3>
+          <p className="text-sm text-gray-500">Monthly Budget</p>
+        </div>
+        <div className={`px-3 py-1 rounded-full text-xs font-medium ${color.bg} text-white`}>
+          {color.label}
+        </div>
       </div>
-      
-      <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
+
+      <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden mb-4">
         <div 
-          className={`h-full ${gaugeColor} transition-all duration-500 ease-out`}
+          className={`absolute left-0 top-0 h-full ${color.bg} transition-all duration-700 ease-out rounded-full`}
           style={{ width: `${animatedWidth}%` }}
         />
       </div>
 
-      <div className="flex justify-between text-sm">
-        <span className="text-gray-600">Spent: <span className="font-medium">₹{safeSpent.toLocaleString('en-IN')}</span></span>
-        <span className="text-gray-600">Budget: <span className="font-medium">₹{safeTotal.toLocaleString('en-IN')}</span></span>
+      <div className="grid grid-cols-3 gap-4 text-center">
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Spent</p>
+          <p className="text-lg font-bold text-gray-900">₹{safeSpent.toLocaleString('en-IN')}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Budget</p>
+          <p className="text-lg font-bold text-gray-900">₹{safeTotal.toLocaleString('en-IN')}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Remaining</p>
+          <p className={`text-lg font-bold ${safeRemaining < 0 ? 'text-red-600' : color.text}`}>
+            ₹{safeRemaining.toLocaleString('en-IN')}
+          </p>
+        </div>
       </div>
-      
-      <div className="text-center mt-2 text-sm">
-        Remaining: <span className="font-semibold text-indigo-600">₹{safeRemaining.toLocaleString('en-IN')}</span>
+
+      <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+        <span className="text-sm text-gray-500">
+          {safePercent.toFixed(1)}% of budget used
+        </span>
       </div>
     </div>
   )
