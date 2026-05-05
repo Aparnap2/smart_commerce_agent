@@ -13,12 +13,13 @@ interface LineItem {
 interface Props {
   prNumber?: string
   lineItems?: LineItem[]
+  items?: LineItem[]  // Support both prop names
   total?: number
   status?: string
 }
 
-const PurchaseRequestDraft: FC<Props> = ({ prNumber, lineItems, total, status }) => {
-  const items = lineItems ?? []
+const PurchaseRequestDraft: FC<Props> = ({ prNumber, lineItems, items: itemsProp, total, status }) => {
+  const items = lineItems ?? itemsProp ?? []
   const safeTotal = total ?? 0
   
   return (
