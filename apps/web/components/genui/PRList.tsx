@@ -77,8 +77,8 @@ const PRList: FC<Props> = ({ requests, loading }) => {
                 <td className="px-6 py-4">
                   <span className="font-medium text-gray-900">#{pr.prNumber ?? 'N/A'}</span>
                   {pr.createdAt && (
-                    <span className="ml-2 text-xs text-gray-400">
-                      {new Date(pr.createdAt).toLocaleDateString()}
+                    <span className="ml-2 text-xs text-gray-400" suppressHydrationWarning>
+                      {new Date(pr.createdAt).toISOString().split('T')[0]}
                     </span>
                   )}
                 </td>
