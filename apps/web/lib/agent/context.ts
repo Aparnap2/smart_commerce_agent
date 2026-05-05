@@ -7,13 +7,17 @@ export async function buildSystemContext(
   const parts: string[] = []
 
   try {
-    const [context, cart, lastOrder] = await Promise.allSettled([
+    const [context, prs, lastPR] = await Promise.allSettled([
       getUserContext(userId),
-      prisma.cart.findUnique({ where: { customerId: userId } }),
-      prisma.order.findFirst({
-        where: { customerId: userId as unknown as number },
-        orderBy: { orderDate: 'desc' },
-        select: { id: true, status: true, orderDate: true, total: true },
+      prisma.purchaseRequest.findMany({
+        where: { requestedBy: userId },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.purchaseRequest.findFirst({
+        where: { requestedBy: userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true, total: true },
       }),
     ])
 
@@ -21,19 +25,17 @@ export async function buildSystemContext(
       parts.push(`User last searched for: "${context.value.lastSearch}"`)
     }
 
-    if (cart.status === 'fulfilled' && cart.value) {
-      const items = await prisma.cartItem.findMany({
-        where: { cartId: cart.value.id }
-      })
-      if (items.length > 0) {
-        const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
-        parts.push(`Cart has ${items.length} item(s), total ₹${total.toLocaleString('en-IN')}`)
+    if (prs.status === 'fulfilled' && prs.value) {
+      const draftCount = prs.value.filter(pr => pr.status === 'DRAFT').length
+      const pendingCount = prs.value.filter(pr => pr.status === 'PENDING').length
+      if (draftCount > 0 || pendingCount > 0) {
+        parts.push(`You have ${draftCount} draft PR(s), ${pendingCount} pending approval`)
       }
     }
 
-    if (lastOrder.status === 'fulfilled' && lastOrder.value) {
-      const order = lastOrder.value
-      parts.push(`Last order #${order.id} is ${order.status}`)
+    if (lastPR.status === 'fulfilled' && lastPR.value) {
+      const pr = lastPR.value
+      parts.push(`Last PR #${pr.id} is ${pr.status} (₹${pr.total?.toLocaleString('en-IN')})`)
     }
   } catch {
     return ''
@@ -49,31 +51,37 @@ export function compactToolResult(
   const MAX = 200
 
   try {
-    if (toolName === 'searchProducts') {
+    if (toolName === 'search_catalog') {
       const items = result as Array<{ name?: string; price?: number }>
-      if (!items || items.length === 0) return 'No products found.'
+      if (!items || items.length === 0) return 'No catalog items found.'
       const top = items[0]
-      const summary = `Found ${items.length} product(s). Top: ${top.name} at ₹${top.price?.toLocaleString('en-IN')}.`
+      const summary = `Found ${items.length} item(s). Top: ${top.name} at ₹${top.price?.toLocaleString('en-IN')}.`
       return summary.slice(0, MAX)
     }
 
-    if (toolName === 'addToCart' || toolName === 'getCart') {
-      const cart = result as { items?: Array<unknown>; total?: number }
-      const count = cart?.items?.length ?? 0
-      const total = cart?.total ?? 0
-      return `Cart updated. ${count} item(s). Total: ₹${total.toLocaleString('en-IN')}.`.slice(0, MAX)
+    if (toolName === 'manage_purchase_request' || toolName === 'view_pr') {
+      const pr = result as { lineItems?: Array<unknown>; total?: number }
+      const count = pr?.lineItems?.length ?? 0
+      const total = pr?.total ?? 0
+      return `PR updated. ${count} item(s). Total: ₹${total.toLocaleString('en-IN')}.`.slice(0, MAX)
     }
 
-    if (toolName === 'getOrders') {
-      const orders = result as Array<{ id?: number; status?: string }>
-      if (!orders || orders.length === 0) return 'No orders found.'
-      const latest = orders[0]
-      return `${orders.length} order(s). Latest: #${latest.id} — ${latest.status}.`.slice(0, MAX)
+    if (toolName === 'get_purchase_requests') {
+      const prs = result as Array<{ id?: number; status?: string; total?: number }>
+      if (!prs || prs.length === 0) return 'No purchase requests found.'
+      const latest = prs[0]
+      return `${prs.length} PR(s). Latest: #${latest.id} — ${latest.status} (₹${latest.total?.toLocaleString('en-IN')}).`.slice(0, MAX)
     }
 
-    if (toolName === 'initiateReturn') {
-      const ret = result as { orderId?: number }
-      return `Return options presented for order #${ret.orderId}.`.slice(0, MAX)
+    if (toolName === 'raise_dispute') {
+      const dispute = result as { prId?: number }
+      return `Dispute raised for PR #${dispute.prId}.`.slice(0, MAX)
+    }
+
+    if (toolName === 'get_budget_status') {
+      const budget = result as { spent?: number; total?: number }
+      const remaining = (budget?.total ?? 0) - (budget?.spent ?? 0)
+      return `Budget: ₹${budget?.spent?.toLocaleString('en-IN')} spent of ₹${budget?.total?.toLocaleString('en-IN')} (₹${remaining.toLocaleString('en-IN')} remaining).`.slice(0, MAX)
     }
 
     const str = JSON.stringify(result)

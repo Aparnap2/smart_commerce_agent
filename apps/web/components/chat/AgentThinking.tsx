@@ -1,14 +1,13 @@
 'use client';
 
 const TOOL_LABELS: Record<string, string> = {
-  hybridSearch: 'Searching products',
-  addToCart: 'Updating cart',
-  getCart: 'Loading cart',
-  createOrder: 'Placing order',
-  getOrders: 'Loading orders',
-  cancelOrder: 'Cancelling order',
-  createTicket: 'Creating ticket',
-  getRecommendations: 'Finding recommendations',
+  search_catalog: 'Searching catalog',
+  get_budget_status: 'Checking budget',
+  manage_purchase_request: 'Updating PR',
+  submit_for_approval: 'Submitting PR',
+  get_purchase_requests: 'Loading PRs',
+  process_approval: 'Processing approval',
+  raise_dispute: 'Raising dispute',
   default: 'Thinking',
 };
 
@@ -16,23 +15,6 @@ interface Props {
   toolName?: string;
 }
 
-/**
- * AgentThinking component displays an animated thinking indicator
- * with three bouncing dots and a tool-specific label.
- *
- * Features:
- * - Three bouncing dots with staggered animation delays
- * - Tool-specific labels (e.g., "Searching products", "Updating cart")
- * - ARIA live region for accessibility
- * - Max width constraint (240px)
- * - Dark mode support
- *
- * @example
- * ```tsx
- * <AgentThinking toolName="hybridSearch" />
- * <AgentThinking /> // Shows default "Thinking..."
- * ```
- */
 export function AgentThinking({ toolName }: Props) {
   const label = (toolName && TOOL_LABELS[toolName]) ?? TOOL_LABELS.default;
 

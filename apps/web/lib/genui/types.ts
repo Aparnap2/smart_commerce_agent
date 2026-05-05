@@ -1,128 +1,81 @@
 /**
  * GenUI Action Types and Registry
- *
- * Type definitions for CopilotKit GenUI actions that render dynamic components.
- *
- * @file genui/types.ts
+ * 
+ * B2B Procurement - Type definitions for CopilotKit GenUI actions
  */
 
 import { z } from 'zod';
 
-export const ProductDataSchema = z.object({
+export const CatalogItemSchema = z.object({
   id: z.string(),
   sku: z.string(),
   name: z.string(),
   description: z.string().optional(),
   price: z.number(),
-  originalPrice: z.number().optional(),
-  currency: z.string().default('USD'),
+  vendor: z.string(),
   category: z.string(),
-  subcategory: z.string().optional(),
-  brand: z.string().optional(),
-  status: z.enum(['in_stock', 'low_stock', 'out_of_stock', 'discontinued']),
+  status: z.enum(['active', 'inactive']),
   stock: z.number(),
-  lowStockThreshold: z.number(),
-  rating: z.number(),
-  reviewCount: z.number(),
-  imageUrl: z.string().optional(),
-  images: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  features: z.array(z.string()).optional(),
-  specifications: z.record(z.string(), z.string()).optional(),
-  weight: z.number().optional(),
-  dimensions: z
-    .object({
-      length: z.number(),
-      width: z.number(),
-      height: z.number(),
-      unit: z.string(),
-    })
-    .optional(),
-  warranty: z.string().optional(),
-  returnable: z.boolean(),
-  returnWindow: z.string().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
 });
 
-export type ProductData = z.infer<typeof ProductDataSchema>;
+export type CatalogItem = z.infer<typeof CatalogItemSchema>;
 
-export const OrderDataSchema = z.object({
+export const PRLineItemSchema = z.object({
   id: z.string(),
-  orderNumber: z.string(),
-  status: z.enum(['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded']),
-  total: z.number(),
-  subtotal: z.number(),
-  tax: z.number(),
-  shipping: z.number(),
-  items: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      quantity: z.number(),
-      price: z.number(),
-      sku: z.string(),
-    })
-  ),
-  shippingAddress: z.object({
-    street: z.string(),
-    city: z.string(),
-    state: z.string(),
-    postalCode: z.string(),
-    country: z.string(),
-  }),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  estimatedDelivery: z.string().optional(),
-  trackingNumber: z.string().optional(),
-  customerId: z.string(),
-  customerEmail: z.string(),
-  customerName: z.string(),
-  paymentMethod: z.string().optional(),
-});
-
-export type OrderData = z.infer<typeof OrderDataSchema>;
-
-export const CartItemSchema = z.object({
-  id: z.string(),
-  productId: z.string(),
+  catalogItemId: z.string(),
   name: z.string(),
   quantity: z.number(),
-  price: z.number(),
+  unitPrice: z.number(),
+  totalPrice: z.number(),
   sku: z.string().optional(),
 });
 
-export type CartItem = z.infer<typeof CartItemSchema>;
+export type PRLineItem = z.infer<typeof PRLineItemSchema>;
 
-export const CartDataSchema = z.object({
-  items: z.array(CartItemSchema),
+export const PurchaseRequestSchema = z.object({
+  id: z.string(),
+  prNumber: z.string(),
+  status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'DISPUTED']),
   total: z.number(),
-  subtotal: z.number(),
-  tax: z.number(),
-  shipping: z.number(),
-  itemCount: z.number(),
+  department: z.string(),
+  requestedBy: z.string(),
+  items: z.array(PRLineItemSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
-export type CartData = z.infer<typeof CartDataSchema>;
+export type PurchaseRequest = z.infer<typeof PurchaseRequestSchema>;
 
 export interface GenUIActionParams {
-  showProductGrid: {
-    products: ProductData[];
+  showCatalogGrid: {
+    items: CatalogItem[];
   };
-  showOrderDetails: {
-    order: OrderData;
-  };
-  showCart: {
-    items: CartItem[];
+  showPRDraft: {
+    items: PRLineItem[];
     total: number;
   };
-  addToCart: {
-    productId: string;
-    quantity: number;
+  showPRList: {
+    requests: PurchaseRequest[];
   };
-  checkout: Record<string, never>;
-  trackOrder: {
-    orderId: string;
+  showBudgetGauge: {
+    spent: number;
+    total: number;
+    department: string;
+  };
+  showBudgetAlert: {
+    percentage: number;
+    message: string;
+  };
+  showApprovalCard: {
+    pr: PurchaseRequest;
+  };
+  showDisputeCard: {
+    pr: PurchaseRequest;
+    reason: string;
+  };
+  showPRSubmitted: {
+    prNumber: string;
+    status: string;
   };
 }
 
