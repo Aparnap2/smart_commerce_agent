@@ -23,9 +23,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
         },
       },
       {
-        name: 'list_orders',
-        description: 'List orders for a user',
-        endpoint: '/mcp/tool/list_orders',
+        name: 'get_purchase_requests',
+        description: 'Get purchase requests for a user',
+        endpoint: '/mcp/tool/get_purchase_requests',
         method: 'POST',
         parameters: {
           userId: 'string (required)',
@@ -44,9 +44,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
         },
       },
       {
-        name: 'search_products',
-        description: 'Search products by query',
-        endpoint: '/mcp/tool/search_products',
+        name: 'search_catalog',
+        description: 'Search catalog by query',
+        endpoint: '/mcp/tool/search_catalog',
         method: 'POST',
         parameters: {
           query: 'string (required)',
@@ -81,9 +81,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
         },
       },
       {
-        name: 'add_to_cart',
-        description: 'Add a product to cart',
-        endpoint: '/mcp/tool/add_to_cart',
+        name: 'add_to_pr',
+        description: 'Add a product to purchase request',
+        endpoint: '/mcp/tool/add_to_pr',
         method: 'POST',
         parameters: {
           userId: 'string (required)',
@@ -130,9 +130,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
     return c.json({ tools });
   });
 
-  // Get order tool
+  // Get order tool (renamed from get_order to get_purchase_requests)
   mcp.post(
-    '/tool/get_order',
+    '/tool/get_purchase_request',
     zValidator(
       'json',
       z.object({
@@ -161,9 +161,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
     }
   );
 
-  // List orders tool
+  // List purchase requests tool (renamed from list_orders)
   mcp.post(
-    '/tool/list_orders',
+    '/tool/get_purchase_requests',
     zValidator(
       'json',
       z.object({
@@ -232,9 +232,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
     }
   );
 
-  // Search products tool
+  // Search catalog tool (renamed from search_products)
   mcp.post(
-    '/tool/search_products',
+    '/tool/search_catalog',
     zValidator(
       'json',
       z.object({
@@ -381,9 +381,9 @@ export const createMCPRegistry = (db: PrismaClient) => {
     }
   );
 
-  // Add to cart tool
+  // Add to PR tool (renamed from add_to_cart)
   mcp.post(
-    '/tool/add_to_cart',
+    '/tool/add_to_pr',
     zValidator(
       'json',
       z.object({
