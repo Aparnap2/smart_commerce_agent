@@ -96,6 +96,28 @@ export async function POST(
       }
     })
 
+    // Resume the LangGraph thread if there's an approval thread ID
+    if (pr.approvalThreadId) {
+      try {
+        const agentBaseUrl = process.env.AGENT_CORE_URL || 'http://localhost:8000'
+        const resumeResponse = await fetch(`${agentBaseUrl}/resume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            thread_id: pr.approvalThreadId,
+            decision: decision,
+            comments: comments || ''
+          })
+        })
+        
+        if (!resumeResponse.ok) {
+          console.error('Failed to resume agent thread:', await resumeResponse.text())
+        }
+      } catch (err) {
+        console.error('Error resuming agent thread:', err)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       prId: updatedPR.id,

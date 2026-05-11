@@ -1,73 +1,95 @@
-# PORT of apps/web/lib/agents/nodes/classify.ts
-# Same 14 intents. Same keyword fallback. Same gpt-oss-120b handling.
-
 from llm.provider import get_llm
 import json, re, os
 
 VALID_INTENTS = {
-    "product_search",
-    "cart_add",
-    "cart_update",
-    "cart_remove",
-    "cart_view",
-    "checkout",
-    "payment",
-    "order_status",
-    "order_history",
-    "order_cancel",
-    "refund_request",
-    "support",
-    "recommendation",
+    "search_catalog",
+    "get_budget_status",
+    "add_to_pr",
+    "view_pr",
+    "remove_from_pr",
+    "submit_pr",
+    "get_pr_status",
+    "get_purchase_requests",
+    "approve_pr",
+    "reject_pr",
+    "raise_dispute",
     "general",
 }
 
 KEYWORD_MAP: dict[str, list[str]] = {
-    "product_search": [
+    "search_catalog": [
         "search",
         "find",
         "show me",
         "looking for",
-        "want to buy",
-        "browse",
+        "browse catalog",
+        "vendor",
+        "product",
     ],
-    "cart_add": ["add to cart", "add", "put in", "i want this", "buy this"],
-    "cart_view": ["my cart", "what's in", "show cart", "view cart", "cart"],
-    "cart_remove": ["remove", "delete from cart", "take out", "don't want"],
-    "cart_update": ["change quantity", "update cart", "modify"],
-    "checkout": ["checkout", "buy now", "place order", "complete purchase", "pay"],
-    "order_status": [
-        "where is my order",
-        "track",
-        "order status",
-        "shipped",
-        "delivery",
+    "get_budget_status": [
+        "budget",
+        "how much left",
+        "spending",
+        "remaining",
+        "department budget",
     ],
-    "order_history": ["my orders", "past orders", "order history", "previous orders"],
-    "order_cancel": ["cancel order", "cancel my order"],
-    "refund_request": [
-        "refund",
-        "return",
-        "money back",
-        "cancel order",
+    "add_to_pr": [
+        "add to request",
+        "add to pr",
+        "add item",
+        "include",
+        "i need this",
+    ],
+    "view_pr": [
+        "my request",
+        "my pr",
+        "show request",
+        "view pr",
+        "draft",
+    ],
+    "remove_from_pr": [
+        "remove from pr",
+        "remove item",
+        "delete from request",
+        "don't need",
+    ],
+    "submit_pr": [
+        "submit",
+        "submit for approval",
+        "send for review",
+        "complete request",
+    ],
+    "get_pr_status": [
+        "status",
+        "where is",
+        "approved",
+        "rejected",
+        "pending",
+    ],
+    "get_purchase_requests": [
+        "my requests",
+        "past requests",
+        "request history",
+        "all prs",
+    ],
+    "approve_pr": [
+        "approve",
+        "accept",
+        "look good",
+        "approved",
+    ],
+    "reject_pr": [
+        "reject",
+        "deny",
+        "not approved",
+        "rejected",
+    ],
+    "raise_dispute": [
         "dispute",
-        "chargeback",
-    ],
-    "support": [
-        "help",
-        "problem",
         "issue",
-        "complaint",
-        "broken",
+        "problem",
         "wrong",
-        "not working",
-    ],
-    "recommendation": [
-        "recommend",
-        "suggest",
-        "what should i",
-        "best",
-        "popular",
-        "top rated",
+        "complaint",
     ],
 }
 
@@ -92,13 +114,13 @@ async def classify_intent(state: dict) -> dict:
                 {
                     "role": "system",
                     "content": (
-                        f"Classify the intent. Valid intents: {', '.join(sorted(VALID_INTENTS))}\n"
-                        "Extract entities: products (list[str]), maxPrice (float|null), "
-                        "minPrice (float|null), quantity (int|null), orderId (str|null)\n"
+                        f"Classify the intent for ProcureAI B2B procurement. Valid intents: {', '.join(sorted(VALID_INTENTS))}\n"
+                        "Extract entities: items (list[str]), maxPrice (float|null), "
+                        "minPrice (float|null), quantity (int|null), prId (str|null)\n"
                         "Detect sentiment: positive | neutral | negative | frustrated\n"
                         "Return ONLY valid JSON, no explanation:\n"
-                        '{"intent":"...","entities":{"products":[],"maxPrice":null,'
-                        '"minPrice":null,"quantity":null,"orderId":null},'
+                        '{"intent":"...","entities":{"items":[],"maxPrice":null,'
+                        '"minPrice":null,"quantity":null,"prId":null},'
                         '"sentiment":"neutral","confidence":0.9}'
                     ),
                 },
@@ -106,14 +128,12 @@ async def classify_intent(state: dict) -> dict:
             ]
         )
 
-        # Handle gpt-oss-120b reasoning model — may return reasoning_content
         content = getattr(resp, "content", "") or ""
         if not content:
             content = (getattr(resp, "additional_kwargs", {}) or {}).get(
                 "reasoning_content", ""
             )
 
-        # Extract JSON from response
         match = re.search(r'\{[^{}]*"intent"[^{}]*\}', content, re.DOTALL)
         if match:
             data = json.loads(match.group())
@@ -128,7 +148,7 @@ async def classify_intent(state: dict) -> dict:
             }
 
     except Exception:
-        pass  # Fall through to keyword fallback
+        pass
 
     return {
         "intent": keyword_classify(text),

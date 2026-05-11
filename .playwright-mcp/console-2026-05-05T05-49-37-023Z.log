@@ -1,0 +1,61 @@
+[   37385ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25022
+[   37530ms] Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/test/genui" tree={[...]} cacheNode={{lazyData:null, ...}} segmentPath={[...]}>
+            <ClientPageRoot Component={function GenUITestPage} searchParams={{}} params={{}}>
+              <GenUITestPage params={Promise} searchParams={Promise}>
+                <div className="p-8 max-w-...">
+                  <h1>
+                  <section>
+                  <section>
+                  <section>
+                  <section>
+                  <section>
+                    <h2>
+                    <div>
+                    <div className="border p-4...">
+                      <h3>
+                      <PRList requests={[...]}>
+                        <div data-testid="pr-list" className="space-y-3">
+                          <div className="bg-white b...">
+                            <div>
+                            <div className="flex justi...">
+                              <span className="text-xs text-gray-500">
++                               01/01/2026
+-                               1/1/2026
+                              ...
+                          ...
+            ...
+
+    at throwOnHydrationMismatch (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:4433:11)
+    at prepareToHydrateHostInstance (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:4531:21)
+    at completeWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:11351:15)
+    at runWithFiberInDEV (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:845:30)
+    at completeUnitOfWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15394:19)
+    at performUnitOfWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15275:11)
+    at workLoopConcurrentByScheduler (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15252:9)
+    at renderRootConcurrent (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15227:15)
+    at performWorkOnRoot (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:14525:13)
+    at performWorkOnRootViaSchedulerTask (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16350:7)
+    at MessagePort.performWorkUntilDeadline (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/compiled/scheduler/cjs/scheduler.development.js:45:48)
+    at span (<anonymous>)
+    at eval (webpack-internal:///(app-pages-browser)/./components/genui/PRList.tsx:124:104)
+    at Array.map (<anonymous>)
+    at PRList (webpack-internal:///(app-pages-browser)/./components/genui/PRList.tsx:64:32)
+    at GenUITestPage (webpack-internal:///(app-pages-browser)/./app/test/genui/page.tsx:421:104)
+    at ClientPageRoot (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.3.1_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.2_react-d_1cc6a026b91c9d0a32ec678cb118db71/node_modules/next/dist/client/components/client-page.js:20:50)
+[  166844ms] [LOG] Approving: {prId: 1, decision: APPROVED, comments: } @ webpack-internal:///(app-pages-browser)/./components/genui/ApprovalCard.tsx:31

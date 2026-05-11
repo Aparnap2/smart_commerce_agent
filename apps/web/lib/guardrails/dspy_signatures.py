@@ -60,7 +60,7 @@ class SafeQuerySignature(dspy.Signature):
         prefix="Safe:",
     )
     intent: str = dspy.OutputField(
-        desc="Detected user intent (search_products, add_to_cart, checkout, order_status, refund_request, support_ticket, greeting, general_query)",
+        desc="Detected user intent (search_catalog, get_budget_status, add_to_pr, view_pr, submit_pr, get_purchase_requests, raise_dispute, general_query)",
         prefix="Intent:",
     )
     toxicity_score: float = dspy.OutputField(
@@ -83,7 +83,7 @@ class SafeQuerySignature(dspy.Signature):
 
 class IntentClassificationSignature(dspy.Signature):
     """
-    Classify query into specific e-commerce intent
+    Classify query into specific B2B procurement intent
     
     More detailed intent classification for routing to appropriate tools.
     """

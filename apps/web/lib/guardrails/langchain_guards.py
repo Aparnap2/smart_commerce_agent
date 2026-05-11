@@ -43,7 +43,7 @@ from .schemas import (
 # ============================================================================
 
 INPUT_GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a safety classifier for an e-commerce chatbot.
+    ("system", """You are a safety classifier for ProcureAI, a B2B procurement assistant.
 Analyze the user's query for:
 1. Toxicity and harmful content
 2. PII (Personally Identifiable Information)
@@ -55,16 +55,16 @@ Respond with a structured safety analysis.
 {format_instructions}
 
 Safety Guidelines:
-- SAFE: Normal queries, greetings, product searches
+- SAFE: Normal queries, greetings, catalog searches, budget questions
 - LOW_RISK: Slightly unusual but harmless queries
 - MEDIUM_RISK: Potentially problematic queries needing review
 - HIGH_RISK: Clearly problematic queries
 - BLOCK: Dangerous, toxic, or malicious queries
 
 Intent Types:
-- search_products, add_to_cart, view_cart, checkout
-- order_status, cancel_order, refund_request
-- support_ticket, general_query, greeting, farewell"""),
+- search_catalog, get_budget_status, add_to_pr, view_pr
+- remove_from_pr, submit_pr, get_pr_status, get_purchase_requests
+- approve_pr, reject_pr, raise_dispute, general_query, greeting, farewell"""),
     ("human", "{query}"),
 ])
 

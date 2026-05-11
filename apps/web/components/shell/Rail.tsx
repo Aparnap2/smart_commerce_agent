@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { MessageSquare, Plus, ShoppingCart, Package, Settings, ChevronLeft, Bell } from 'lucide-react'
+import { MessageSquare, Plus, FileText, Package, Settings, ChevronLeft, Bell } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useProcurementStore, type DepartmentBudget } from '@/lib/stores/procurement'
 import BudgetGauge from '../genui/BudgetGauge'
@@ -145,7 +145,7 @@ export const Rail: React.FC = () => {
                 </button>
                 <button className="w-full flex items-center gap-3 px-3 py-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-sm font-medium transition-colors">
                     <MessageSquare size={18} className="shrink-0" />
-                    <span className="truncate hidden md:block lg:block">Order tracking ORD-992</span>
+                    <span className="truncate hidden md:block lg:block">PR tracking PR-992</span>
                 </button>
             </div>
 
@@ -155,15 +155,15 @@ export const Rail: React.FC = () => {
                 <div className="space-y-3">
                     <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                            <ShoppingCart size={14} className="shrink-0" />
-                            <span className="hidden md:block lg:block whitespace-nowrap">Cart Total</span>
+                            <FileText size={14} className="shrink-0" />
+                            <span className="hidden md:block lg:block whitespace-nowrap">PR Total</span>
                         </div>
                         <span className="font-bold text-gray-900 dark:text-white hidden md:block lg:block">₹44,890</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                             <Package size={14} className="shrink-0" />
-                            <span className="hidden md:block lg:block whitespace-nowrap">Last Order</span>
+                            <span className="hidden md:block lg:block whitespace-nowrap">Last PR</span>
                         </div>
                         <span className="text-green-600 dark:text-green-400 font-medium hidden md:block lg:block">Shipped</span>
                     </div>
