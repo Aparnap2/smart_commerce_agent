@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
-from .notifications import publish_approval_event
+from .notifications import publish_approval_event, send_slack_notification
 
 # ─────────────────────────────────────────────────────────
 # DETERMINISTIC HELPER FUNCTIONS (PRD Part 5 - Features)
@@ -682,6 +682,21 @@ async def process_approval(
         await publish_approval_event(pr_id, decision, approver_email, comments)
     except Exception as e:
         logger.error(f"Failed to publish notification event: {e}")
+
+    # Send Slack notification
+    try:
+        pr = await conn.fetchrow('SELECT "prNumber", "requestorId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
+        if pr:
+            await send_slack_notification(
+                channel="procurement-approvals",
+                pr_number=pr["prNumber"],
+                decision=decision,
+                requestor="Employee",
+                total_amount=total,
+                approver=approver_email
+            )
+    except Exception as e:
+        logger.error(f"Failed to send Slack notification: {e}")
 
     return json.dumps({
         "success": True,
