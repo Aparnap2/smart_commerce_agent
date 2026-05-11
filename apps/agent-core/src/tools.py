@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
+from .notifications import publish_approval_event
 
 # ─────────────────────────────────────────────────────────
 # DETERMINISTIC HELPER FUNCTIONS (PRD Part 5 - Features)
@@ -339,9 +340,8 @@ async def manage_purchase_request(
                 "totalWithTax": total_with_tax
             }))
 
-            await conn.execute("""
-                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" + $1 WHERE id=$2
-            """, line_total, dept_id)
+            # NOTE: Budget is NOT debited here - only debited on PR approval
+            # This prevents budget from being locked when items are added to draft
 
             return json.dumps({
                 "success": True,
@@ -653,15 +653,23 @@ async def process_approval(
         """, str(uuid.uuid4()), pr_id, f"PR_{decision}", approver_email, json.dumps({"comments": comments}))
 
         pr = await conn.fetchrow('SELECT "totalAmount", "departmentId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
-        if pr and decision == "REJECTED":
+        if pr:
             total = pr["totalAmount"]
             dept_id = pr["departmentId"]
-            await conn.execute("""
-                UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" - $1 WHERE id=$2
-            """, total, dept_id)
+            if decision == "APPROVED":
+                await conn.execute("""
+                    UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" + $1 WHERE id=$2
+                """, total, dept_id)
+            # Note: No rollback needed on REJECTED - budget was never debited on add_item
 
     # Build notification event for deterministic triggers
     notification_event = build_notification_payload(pr_id, get_notification_event_type(decision))
+    
+    # Publish notification event to Redis for real-time updates
+    try:
+        await publish_approval_event(pr_id, decision, approver_email, comments)
+    except Exception as e:
+        logger.error(f"Failed to publish notification event: {e}")
 
     return json.dumps({
         "success": True,

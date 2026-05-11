@@ -111,3 +111,47 @@ async def health():
     async with pool.acquire() as conn:
         pg_ok = bool(await conn.fetchval("SELECT 1"))
     return {"status": "ok", "service": "agent-core", "version": "1.0.0", "postgres": pg_ok}
+
+
+class ResumeRequest(BaseModel):
+    thread_id: str
+    decision: str  # "APPROVED" or "REJECTED"
+    comments: str = ""
+
+
+@app.post("/resume")
+async def resume_approval(body: ResumeRequest):
+    """Resume a paused graph (e.g., after manager approval decision)"""
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.types import Command
+    
+    config = RunnableConfig(
+        configurable={
+            "thread_id": body.thread_id,
+            "user_id": "manager",  # The manager who approved/rejected
+            "role": "MANAGER",
+        }
+    )
+    
+    # Resume the graph with the decision
+    # This will trigger the approval_gate_node to receive the decision
+    resume_message = f"PR {body.decision}: {body.comments}"
+    
+    try:
+        result = await graph.invoke(
+            Command(resume={"decision": body.decision, "comments": body.comments}),
+            config=config
+        )
+        
+        return {
+            "success": True,
+            "thread_id": body.thread_id,
+            "decision": body.decision,
+            "result": "Graph resumed successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error resuming graph: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
