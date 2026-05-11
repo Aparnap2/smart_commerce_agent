@@ -1,14 +1,20 @@
 """
 Notifications module for publishing approval events.
 
-This module provides functions to publish PR approval events to Redis pubsub
-and optionally via QStash for durable fallback.
+This module provides functions to publish PR approval events to Redis pubsub,
+Slack, and optionally via QStash for durable fallback.
 """
 import json
 import uuid
+import os
+import httpx
 from datetime import datetime, timezone
 
 from .dependencies import get_redis
+
+# Slack API URL - use mock in dev (localhost:3002), real API in production
+SLACK_API_URL = os.environ.get("SLACK_API_URL", "http://localhost:3002")
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "xoxb-mock-token")
 
 
 async def publish_approval_event(
@@ -80,3 +86,73 @@ async def publish_with_qstash(
     """
     # TODO: Implement QStash publishing when QSTASH_URL and QSTASH_TOKEN are configured
     return {"success": False, "reason": "qstash_not_configured"}
+
+
+async def send_slack_notification(
+    channel: str,
+    pr_number: str,
+    decision: str,
+    requestor: str,
+    total_amount: int,
+    approver: str = "",
+) -> dict:
+    """Send Slack notification for PR approval/rejection.
+    
+    Uses mock Slack API in dev (localhost:3002), real API in production.
+    
+    Args:
+        channel: Slack channel to post to
+        pr_number: PR number (e.g., "PR-101")
+        decision: "APPROVED" or "REJECTED"
+        requestor: Who requested the PR
+        total_amount: Amount in cents
+        approver: Who approved/rejected
+    
+    Returns:
+        dict with success status and Slack response
+    """
+    emoji = "✅" if decision == "APPROVED" else "❌"
+    color = "#36a64f" if decision == "APPROVED" else "#ff0000"
+    
+    text = f"{emoji} *Purchase Request {pr_number} {decision}*"
+    
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": text
+            }
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Requestor:*\n{requestor}"},
+                {"type": "mrkdwn", "text": f"*Amount:*\n₹{total_amount / 100:,}"},
+                {"type": "mrkdwn", "text": f"*Decision:*\n{decision}"},
+                {"type": "mrkdwn", "text": f"*Approver:*\n{approver}"}
+            ]
+        }
+    ]
+    
+    payload = {
+        "channel": channel,
+        "text": text,
+        "blocks": blocks,
+        "attachments": [{"color": color}]
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{SLACK_API_URL}/api/chat.postMessage",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                }
+            )
+            result = resp.json()
+            return {"success": True, "slack_response": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
-from .notifications import publish_approval_event
+from .notifications import publish_approval_event, send_slack_notification
 
 # ─────────────────────────────────────────────────────────
 # DETERMINISTIC HELPER FUNCTIONS (PRD Part 5 - Features)
@@ -364,7 +364,7 @@ async def manage_purchase_request(
                 return json.dumps({"pr": None, "message": "No draft PR found. Create one first."})
 
             items = await conn.fetch("""
-                SELECT li.*, ci.name, ci.vendor, ci.imageUrl
+                SELECT li.*, ci.name, ci.vendor, ci."imageUrl"
                 FROM "PRLineItem" li
                 JOIN "CatalogItem" ci ON ci.id=li."catalogItemId"
                 WHERE li."prId"=$1
@@ -372,13 +372,25 @@ async def manage_purchase_request(
 
             line_items = [dict(i) for i in items]
 
+            # Convert dates to ISO format for JSON serialization
+            pr_dict = dict(pr)
+            for key, value in pr_dict.items():
+                if hasattr(value, 'isoformat'):
+                    pr_dict[key] = value.isoformat()
+            
+            # Convert line item dates as well
+            for item in line_items:
+                for key, value in item.items():
+                    if hasattr(value, 'isoformat'):
+                        item[key] = value.isoformat()
+
             # Calculate totals including tax
             subtotal = sum(i.get("totalPrice", 0) for i in line_items)
             total_tax = sum(i.get("taxAmount", 0) for i in line_items)
             total_with_tax = sum(i.get("totalWithTax", 0) for i in line_items)
 
             return json.dumps({
-                "pr": dict(pr),
+                "pr": pr_dict,
                 "lineItems": line_items,
                 "subtotal": subtotal,
                 "totalTax": total_tax,
@@ -640,7 +652,7 @@ async def process_approval(
 
         await conn.execute("""
             UPDATE "PurchaseRequest"
-            SET status=$1,
+            SET status=$1::"PRStatus",
                 "approvedAt"=CASE WHEN $1='APPROVED' THEN NOW() ELSE NULL END,
                 "rejectedAt"=CASE WHEN $1='REJECTED' THEN NOW() ELSE NULL END,
                 notes=$2
@@ -670,6 +682,21 @@ async def process_approval(
         await publish_approval_event(pr_id, decision, approver_email, comments)
     except Exception as e:
         logger.error(f"Failed to publish notification event: {e}")
+
+    # Send Slack notification
+    try:
+        pr = await conn.fetchrow('SELECT "prNumber", "requestorId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
+        if pr:
+            await send_slack_notification(
+                channel="procurement-approvals",
+                pr_number=pr["prNumber"],
+                decision=decision,
+                requestor="Employee",
+                total_amount=total,
+                approver=approver_email
+            )
+    except Exception as e:
+        logger.error(f"Failed to send Slack notification: {e}")
 
     return json.dumps({
         "success": True,
