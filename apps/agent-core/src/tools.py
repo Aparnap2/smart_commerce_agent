@@ -364,7 +364,7 @@ async def manage_purchase_request(
                 return json.dumps({"pr": None, "message": "No draft PR found. Create one first."})
 
             items = await conn.fetch("""
-                SELECT li.*, ci.name, ci.vendor, ci.imageUrl
+                SELECT li.*, ci.name, ci.vendor, ci."imageUrl"
                 FROM "PRLineItem" li
                 JOIN "CatalogItem" ci ON ci.id=li."catalogItemId"
                 WHERE li."prId"=$1
@@ -372,13 +372,25 @@ async def manage_purchase_request(
 
             line_items = [dict(i) for i in items]
 
+            # Convert dates to ISO format for JSON serialization
+            pr_dict = dict(pr)
+            for key, value in pr_dict.items():
+                if hasattr(value, 'isoformat'):
+                    pr_dict[key] = value.isoformat()
+            
+            # Convert line item dates as well
+            for item in line_items:
+                for key, value in item.items():
+                    if hasattr(value, 'isoformat'):
+                        item[key] = value.isoformat()
+
             # Calculate totals including tax
             subtotal = sum(i.get("totalPrice", 0) for i in line_items)
             total_tax = sum(i.get("taxAmount", 0) for i in line_items)
             total_with_tax = sum(i.get("totalWithTax", 0) for i in line_items)
 
             return json.dumps({
-                "pr": dict(pr),
+                "pr": pr_dict,
                 "lineItems": line_items,
                 "subtotal": subtotal,
                 "totalTax": total_tax,
@@ -640,7 +652,7 @@ async def process_approval(
 
         await conn.execute("""
             UPDATE "PurchaseRequest"
-            SET status=$1,
+            SET status=$1::"PRStatus",
                 "approvedAt"=CASE WHEN $1='APPROVED' THEN NOW() ELSE NULL END,
                 "rejectedAt"=CASE WHEN $1='REJECTED' THEN NOW() ELSE NULL END,
                 notes=$2
