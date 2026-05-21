@@ -1,27 +1,29 @@
-import { getToken } from 'next-auth/jwt'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function middleware(req: NextRequest) {
-  const token = await getToken({ req })
-  if (!token) {
-    return NextResponse.redirect(new URL('/auth/login', req.url))
-  }
-  
-  const role = token.role as string
   const path = req.nextUrl.pathname
   
-  if (path.startsWith('/manager') && !['MANAGER', 'ADMIN'].includes(role)) {
-    return NextResponse.redirect(new URL('/chat', req.url))
+  // Public paths that don't require auth
+  const publicPaths = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/api/auth', '/_next', '/favicon.ico']
+  if (publicPaths.some(p => path.startsWith(p))) {
+    return NextResponse.next()
   }
   
-  if (path.startsWith('/finance') && !['FINANCE', 'ADMIN'].includes(role)) {
-    return NextResponse.redirect(new URL('/chat', req.url))
+  // Check for custom JWT auth cookie (set by /api/auth/login)
+  const cookieHeader = req.headers.get('cookie') || ''
+  const hasAuthCookie = cookieHeader.includes('token=')
+  
+  // Debug logging (remove in production)
+  console.log('[Middleware] Path:', path, '| Has token cookie:', hasAuthCookie, '| Cookie:', cookieHeader.slice(0, 100))
+  
+  if (!hasAuthCookie) {
+    return NextResponse.redirect(new URL('/auth/login', req.url))
   }
   
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/manager/:path*', '/finance/:path*'],
+  matcher: ['/chat/:path*', '/manager/:path*', '/finance/:path*', '/admin/:path*'],
 }

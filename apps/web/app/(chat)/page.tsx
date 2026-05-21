@@ -2,79 +2,215 @@
 
 export const dynamic = 'force-dynamic'
 
-import React from 'react'
-import { useStream } from '@langchain/langgraph-sdk/react'
-import { uiMessageReducer, LoadExternalComponent } from '@langchain/langgraph-sdk/react-ui'
-import { useSession } from 'next-auth/react'
-import { useState, useRef, useEffect } from 'react'
-import type { Message } from '@langchain/langgraph-sdk'
+import React, { useState, useRef, useEffect } from 'react'
 import { redirect } from 'next/navigation'
 import { Shell } from '@/components/shell/Shell'
 import { Rail } from '@/components/shell/Rail'
+import CatalogGrid from '@/components/genui/CatalogGrid'
 
-const LANGGRAPH_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL ?? 'http://localhost:2024'
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  id?: string
+}
+
+interface UIComponent {
+  type: string
+  props: any
+}
 
 const SUGGESTIONS = [
-  'Show me headphones under ₹15,000',
-  "What's in my cart?",
-  'Show my recent orders',
-  'Find gaming accessories under ₹5,000',
+  'Show me laptops',
+  'Check my budget',
+  'Show pending approvals',
 ] as const
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`))
+  return match ? decodeURIComponent(match[2]) : null
+}
+
 export default function CustomerChatPage() {
-  const { data: session, status } = useSession()
+  const [token, setToken] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [uiComponents, setUIComponents] = useState<UIComponent[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Skip authentication in test mode (Cypress E2E tests)
-  const isTestMode = typeof window !== 'undefined' && window.Cypress
+  useEffect(() => {
+    const t = getCookie('token')
+    setToken(t)
+    setLoading(false)
+  }, [])
 
-  // In test mode, skip all auth checks and render immediately
-  if (isTestMode) {
-    // Cypress tests - skip auth, render chat directly
-  } else {
-    // Production mode - enforce auth
-    if (status === 'loading') return null
-    if (status === 'unauthenticated') redirect('/auth/login')
-    if (session?.user?.role === 'MERCHANT') redirect('/admin/chat')
+  const isTestMode = typeof window !== 'undefined' && ((window as any).Cypress || (window as any).__PLAYWRIGHT__)
+
+  if (!isTestMode) {
+    if (loading) return null
+    if (!token) redirect('/auth/login')
   }
 
-  const thread = useStream<
-    { messages: Message[] },
-    { metaType: { ui: typeof uiMessageReducer } }
-  >({
-    apiUrl: LANGGRAPH_URL,
-    assistantId: 'customer',
-    messagesKey: 'messages',
-    onCustomEvent: (event, options) => {
-      options.mutate(prev => ({
-        ...prev,
-        ui: uiMessageReducer(prev.ui ?? [], event),
-      }))
-    },
-    defaultConfig: {
-      configurable: {
-        userId: isTestMode ? 'test-user-id' : session?.user?.id,
-        threadId: crypto.randomUUID(),
-      },
-    },
-  })
-
-  const sendMessage = (text: string) => {
-    if (!text.trim() || thread.isLoading) return
-    thread.submit({ messages: [{ role: 'user', content: text }] })
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return
+    
+    // Add user message
+    const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now().toString() }
+    setMessages(prev => [...prev, userMsg])
     setInput('')
+    setIsLoading(true)
+    setUIComponents([])
+
+    try {
+      // Get token from cookie
+      const token = document.cookie.split('token=')[1]?.split(';')[0] || '';
+      
+      // Call our API which proxies to agent-core
+      const response = await fetch('/api/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-test-mode': isTestMode ? 'true' : '',
+          'x-user-id': isTestMode ? 'test-user-id' : 'employee',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: text }],
+          user_id: isTestMode ? 'test-user-id' : 'employee',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      // Read SSE stream
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      let buffer = ''
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        buffer += decoder.decode(value, { stream: true })
+        
+        // Parse SSE events
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        let eventType = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            try {
+              if (eventType === 'delta') {
+                const parsed = JSON.parse(data)
+                let content = parsed.content || ''
+                
+                // Try to extract __ui__ from JSON content
+                try {
+                  const inner = JSON.parse(content)
+                  if (inner.__ui__) {
+                    setUIComponents(prev => [...prev, {
+                      type: inner.__ui__.name,
+                      props: inner.__ui__.props,
+                    }])
+                    content = ''  // Skip showing JSON metadata in messages
+                  }
+                } catch {
+                  // Not JSON, use as-is
+                }
+                
+                if (content) {
+                  setMessages(prev => {
+                    const last = prev[prev.length - 1]
+                    if (last?.role === 'assistant') {
+                      return [...prev.slice(0, -1), { ...last, content: last.content + content }]
+                    }
+                    return [...prev, { role: 'assistant', content }]
+                  })
+                }
+              }
+              
+              if (eventType === 'ui_actions') {
+                const parsed = JSON.parse(data)
+                const actions = parsed.actions || []
+                for (const action of actions) {
+                  if (action?.name) {
+                    setUIComponents(prev => [...prev, { type: action.name, props: action.props }])
+                  }
+                }
+              }
+              
+              if (eventType === 'complete') {
+                setIsLoading(false)
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Send error:', error)
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `Error: ${error.message}` 
+      }])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [thread.messages, thread.values?.ui])
+  }, [messages, uiComponents])
 
-  // Render inside Shell with Rail
+  const renderUIComponent = (ui: UIComponent, i: number) => {
+    switch (ui.type) {
+      case 'catalog-grid': {
+        const rawItems = ui.props?.items || ui.props?.products || []
+        const items = rawItems.map((p: any) => ({
+          id: String(p.id ?? p.sku ?? ''),
+          name: p.name ?? '',
+          vendor: p.vendor ?? 'Unknown Vendor',
+          unitPrice: p.unitPrice ?? p.price ?? null,
+          category: p.category ?? null,
+          inStock: p.inStock !== false,
+          leadDays: p.leadDays ?? null,
+        }))
+        return (
+          <div key={i}>
+            <CatalogGrid items={items} loading={ui.props?.loading} />
+          </div>
+        )
+      }
+      case 'budget-gauge':
+        return (
+          <div key={i} data-testid="budget-gauge" className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-sm font-medium">Budget Status</div>
+            <div className="text-2xl font-bold text-blue-600">₹{((ui.props?.remaining || 0) / 100).toLocaleString()}</div>
+            <div className="text-xs text-gray-500">of ₹{((ui.props?.total || 0) / 100).toLocaleString()}</div>
+          </div>
+        )
+      default:
+        return <div key={i} className="text-xs text-gray-400">Unknown: {ui.type}</div>
+    }
+  }
+
   return (
     <Shell rail={<Rail />}>
       <div className="flex flex-col h-screen bg-gray-50 max-w-2xl mx-auto">
-        {/* Header */}
         <div className="bg-white border-b px-4 py-3 flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-bold">T</div>
           <div>
@@ -83,13 +219,11 @@ export default function CustomerChatPage() {
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          {/* Suggestions (shown when no messages) */}
-          {!thread.messages?.length && (
+          {!messages.length && (
             <div className="space-y-3">
               <p className="text-center text-gray-500 text-sm">
-                👋 Hi{session?.user?.name ? `, ${session.user.name}` : ''}! How can I help?
+                👋 Hi! How can I help?
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {SUGGESTIONS.map(s => (
@@ -105,49 +239,26 @@ export default function CustomerChatPage() {
             </div>
           )}
 
-          {/* Message list */}
-          {thread.messages?.map((msg, i) => {
-            const isUser = msg.type === 'human' || msg.role === 'user'
-
-            // Find matching UI for this message position
-            const uiForMsg = thread.values?.ui?.filter(
-              u => u.metadata?.messageId === msg.id || u.metadata?.index === i
-            )
-
-            return (
-              <div key={msg.id ?? i} className="space-y-2">
-                {/* Text bubble */}
-                {typeof msg.content === 'string' && msg.content && (
-                  <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      data-testid={isUser ? 'message-user' : 'message-assistant'}
-                      className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm
-                        ${isUser ? 'bg-indigo-600 text-white' : 'bg-white text-gray-900 border border-gray-200'}`}>
-                      {msg.content}
-                    </div>
-                  </div>
-                )}
-
-                {/* GenUI components for this message */}
-                {uiForMsg?.map((uiMsg, j) => (
-                  <LoadExternalComponent
-                    key={j}
-                    stream={thread}
-                    message={uiMsg}
-                    meta={{ userId: session?.user?.id }}
-                  />
-                ))}
+          {messages.map((msg, i) => (
+            <div key={msg.id || i} className="space-y-2">
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  data-testid={msg.role === 'user' ? 'message-user' : 'message-assistant'}
+                  className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm
+                    ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-900 border border-gray-200'}`}>
+                  {msg.content}
+                </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
 
-          {/* Thinking indicator */}
-          {thread.isLoading && (
+          {uiComponents.map((ui, i) => renderUIComponent(ui, i))}
+
+          {isLoading && (
             <div data-testid="agent-thinking" className="flex justify-start">
               <div className="bg-white border border-gray-200 rounded-2xl px-4 py-2 flex gap-1">
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }} />
+                  <div key={i} className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />
                 ))}
               </div>
             </div>
@@ -156,7 +267,6 @@ export default function CustomerChatPage() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
         <div className="bg-white border-t px-4 py-3 flex gap-3 items-end">
           <textarea
             data-testid="chat-input"
@@ -177,7 +287,7 @@ export default function CustomerChatPage() {
             data-testid="send-button"
             aria-label="Send message"
             onClick={() => sendMessage(input)}
-            disabled={!input.trim() || thread.isLoading}
+            disabled={!input.trim() || isLoading}
             className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center disabled:opacity-50 hover:bg-indigo-700 transition-colors">
             ↑
           </button>

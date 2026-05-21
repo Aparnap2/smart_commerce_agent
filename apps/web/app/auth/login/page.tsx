@@ -1,6 +1,5 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { LogIn, Mail, Lock, Loader2 } from 'lucide-react';
@@ -19,22 +18,28 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Redirect based on email pattern - manager emails contain 'manager'
-      const isManager = email.toLowerCase().includes('manager');
-      const callbackUrl = isManager ? '/admin/chat' : '/chat';
-
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: true,
-        callbackUrl,
+      // Call our own API which sets the JWT cookie properly
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
       });
 
-      // If redirect=false (shouldn't happen with above), handle manually
-      if (result?.error) {
-        setError("Invalid email or password");
-        toast.error("Invalid email or password");
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Invalid email or password");
+        toast.error(data.error || "Invalid email or password");
+        return;
       }
+
+      // Set token cookie manually from response
+      document.cookie = `token=${data.token}; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 3600}`;
+
+      // Redirect to chat
+      router.push('/');
     } catch (err) {
       setError('An unexpected error occurred');
       console.error('Login error:', err);
@@ -88,6 +93,7 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                data-testid="email-input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -114,6 +120,7 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
+                data-testid="password-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
@@ -137,7 +144,7 @@ export default function LoginPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            data-testid="login-submit"
+            data-testid="login-btn"
             disabled={loading}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
           >

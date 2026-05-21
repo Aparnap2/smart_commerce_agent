@@ -55,7 +55,7 @@ const PRList: FC<Props> = ({ requests, loading }) => {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div data-testid="pr-list" className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <table className="w-full">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
@@ -73,7 +73,7 @@ const PRList: FC<Props> = ({ requests, loading }) => {
             const safeTotal = pr.total ?? pr.totalAmount ?? 0
             
             return (
-              <tr key={pr.id} className="hover:bg-gray-50 transition-colors">
+              <tr data-testid="pr-item" key={pr.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4">
                   <span className="font-medium text-gray-900">#{pr.prNumber ?? 'N/A'}</span>
                   {pr.createdAt && (

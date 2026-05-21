@@ -7,6 +7,121 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
 from .notifications import publish_approval_event, send_slack_notification
+import re
+
+
+def sanitize_external_content(text: str) -> str:
+    """
+    Pattern 18: Lethal Trifecta - sanitize external API content.
+    
+    Removes prompt injection attempts from external content (e.g., SerpApi results).
+    The agent processes external web content which could contain malicious
+    prompt injections from seller listings.
+    
+    Args:
+        text: Raw text from external API
+        
+    Returns:
+        Sanitized text with injection patterns removed
+    """
+    if not text:
+        return text
+    
+    injection_patterns = [
+        r"ignore\s+(previous|above|all)\s+instructions",
+        r"system\s+prompt",
+        r"you\s+are\s+now",
+        r"new\s+instructions",
+        r"ignore\s+all\s+rules",
+        r"disregard\s+.*instructions",
+        r"forget\s+.*previous",
+    ]
+    
+    for pattern in injection_patterns:
+        text = re.sub(pattern, "[REDACTED]", text, flags=re.IGNORECASE)
+    
+    return text
+
+
+def format_error_response(error_data: dict) -> str:
+    """
+    Pattern 9: Feed Errors Into Context - format errors as natural language.
+    
+    Instead of returning raw error JSON, format errors so the LLM can
+    reason about them and provide helpful suggestions to the user.
+    
+    Args:
+        error_data: Dict with error information
+        
+    Returns:
+        JSON string with error=True, message, and suggestion fields
+    """
+    error_type = error_data.get("error", "unknown_error")
+    ui = error_data.pop("__ui__", None)  # Extract UI for frontend
+    
+    message = ""
+    suggestion = ""
+    
+    if error_type == "budget_exceeded":
+        remaining = error_data.get("remaining", 0)
+        requested = error_data.get("requested", 0)
+        message = f"Budget exceeded. Requested ₹{requested/100:.2f} but only ₹{remaining/100:.2f} remaining."
+        suggestion = "Consider searching for a lower-cost alternative or splitting the request into multiple PRs."
+        
+    elif error_type == "user_not_found" or (("not found" in error_type.lower() or "not found" in str(error_data).lower()) and "catalog" not in error_type.lower()):
+        email = error_data.get("email", "")
+        message = f"User not found: {email}" if email else "User not found in system."
+        suggestion = "Please check the email address or contact IT support."
+        
+    elif "catalog" in error_type.lower() or error_type == "Catalog item not found":
+        message = "The requested item is not available in the catalog."
+        suggestion = "Try a broader search or browse different categories."
+        
+    elif error_type == "vendor_not_approved":
+        message = "This vendor is not approved for procurement."
+        suggestion = "Please select an approved vendor or request vendor approval."
+        
+    elif error_type == "vendor_msa_expired":
+        message = "The vendor's master agreement has expired."
+        suggestion = "Contact procurement to renew the vendor agreement."
+        
+    elif "not in DRAFT" in error_type or error_type == "invalid_status":
+        current = error_data.get("current_status", "unknown")
+        message = f"Cannot modify PR - current status is {current}."
+        suggestion = "Only DRAFT PRs can be modified. Create a new PR or contact the requestor."
+        
+    elif error_type == "Only MANAGER or ADMIN can approve PRs":
+        current_role = error_data.get("current_role", "unknown")
+        message = f"Your role ({current_role}) does not have permission to approve purchase requests."
+        suggestion = "Only MANAGER or ADMIN roles can approve PRs. Please contact an approver."
+        
+    elif error_type == "No pending approval found":
+        message = "No pending approval found for this PR."
+        suggestion = "The PR may have already been processed or doesn't require approval."
+        
+    elif "no department_id" in error_type.lower():
+        message = "Unable to determine your department."
+        suggestion = "Please log out and log back in to refresh your session."
+        
+    else:
+        # Generic fallback
+        message = error_data.get("error", "An error occurred")
+        if "details" in error_data:
+            message += f": {error_data['details']}"
+        suggestion = "Please try again or contact support if the problem persists."
+    
+    result = {
+        "error": True,
+        "message": message,
+        "suggestion": suggestion,
+    }
+    
+    # Restore UI if present
+    if ui:
+        result["__ui__"] = ui
+    
+    return json.dumps(result)
+
 
 # ─────────────────────────────────────────────────────────
 # DETERMINISTIC HELPER FUNCTIONS (PRD Part 5 - Features)
@@ -738,6 +853,58 @@ async def raise_dispute(
             "props": {"prId": pr_id, "reason": reason}
         }
     })
+
+
+def get_tools_for_role(role: str) -> list:
+    """
+    Get role-specific tool list.
+    
+    Implements Pattern 3: Dynamic Agents - filter toolset by role.
+    This reduces LLM confusion, tightens security, and makes Langfuse traces cleaner.
+    
+    Args:
+        role: User role (EMPLOYEE, MANAGER, ADMIN, FINANCE)
+        
+    Returns:
+        List of tools available for the role
+    """
+    role = role.upper() if role else ""
+    
+    # Base tools available to all roles
+    base_tools = [
+        search_catalog,
+        get_budget_status,
+        get_purchase_requests,
+    ]
+    
+    # Tools for EMPLOYEE - can create and submit PRs, but NOT approve
+    employee_tools = base_tools + [
+        manage_purchase_request,
+        submit_for_approval,
+        raise_dispute,
+    ]
+    
+    # Tools for MANAGER - all tools including approval
+    manager_tools = employee_tools + [
+        process_approval,
+    ]
+    
+    # Tools for ADMIN - same as manager (full access)
+    admin_tools = manager_tools
+    
+    # Tools for FINANCE - read only, no PR submission or approval
+    finance_tools = base_tools + [
+        raise_dispute,
+    ]
+    
+    role_map = {
+        "EMPLOYEE": employee_tools,
+        "MANAGER": manager_tools,
+        "ADMIN": admin_tools,
+        "FINANCE": finance_tools,
+    }
+    
+    return role_map.get(role, [])
 
 
 ALL_TOOLS = [

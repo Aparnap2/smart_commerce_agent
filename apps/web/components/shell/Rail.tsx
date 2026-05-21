@@ -2,32 +2,33 @@
 
 import React, { useEffect, useState } from 'react'
 import { MessageSquare, Plus, FileText, Package, Settings, ChevronLeft, Bell } from 'lucide-react'
-import { useSession } from 'next-auth/react'
 import { useProcurementStore, type DepartmentBudget } from '@/lib/stores/procurement'
 import BudgetGauge from '../genui/BudgetGauge'
 
+function getTokenPayload() {
+  try {
+    const token = document.cookie.split('token=')[1]?.split(';')[0]
+    if (!token) return null
+    return JSON.parse(atob(token.split('.')[1]))
+  } catch {
+    return null
+  }
+}
+
 /**
  * Rail Component - Sidebar navigation panel
- *
- * Provides persistent navigation and context:
- * - Desktop (≥1280px): Full 260px width with labels
- * - Tablet (768px-1279px): Collapsed 64px width, icons only
- * - Mobile (≤767px): Hidden via CSS media query
- *
- * @example
- * ```tsx
- * // Usage in Shell component
- * <Shell rail={<Rail />}>
- *   {children}
- * </Shell>
- * ```
  */
 export const Rail: React.FC = () => {
-    const { data: session } = useSession()
+    const [session, setSession] = useState<any>(null)
     const { budget, setBudget, pendingCount, setPendingCount } = useProcurementStore()
     const [isLoading, setIsLoading] = useState(true)
     
-    const isManager = session?.user?.role === 'MERCHANT' || session?.user?.employeeRole === 'MANAGER'
+    useEffect(() => {
+      const payload = getTokenPayload()
+      setSession(payload ? { user: payload } : null)
+    }, [])
+    
+    const isManager = session?.user?.role === 'MANAGER' || session?.user?.role === 'ADMIN'
 
     useEffect(() => {
         const fetchBudget = async () => {
@@ -110,12 +111,33 @@ export const Rail: React.FC = () => {
                 </div>
             )}
 
+            {/* Navigation for all users */}
+            <div className="px-4 pb-2 shrink-0 space-y-1">
+                <a 
+                    href="/chat" 
+                    data-testid="my-prs-nav"
+                    className="flex items-center gap-2 p-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                >
+                    <FileText size={16} />
+                    <span className="hidden md:block lg:block">My PRs</span>
+                </a>
+                <a 
+                    href="/chat" 
+                    data-testid="catalog-nav"
+                    className="flex items-center gap-2 p-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                >
+                    <Package size={16} />
+                    <span className="hidden md:block lg:block">Catalog</span>
+                </a>
+            </div>
+
             {/* Pending Approvals (Managers only) */}
             {isManager && pendingCount > 0 && (
                 <div className="px-4 pb-2 shrink-0">
                     <a 
                         href="/manager" 
-                        data-testid="rail-pending-link"
+                        data-testid="approvals-nav"
+                        data-testid-legacy="rail-pending-link"
                         className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
                     >
                         <div className="flex items-center gap-2">

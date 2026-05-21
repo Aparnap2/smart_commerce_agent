@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type':  'application/json',
         'Authorization': token,
+        'x-test-mode':   req.headers.get('x-test-mode') ?? '',
+        'x-user-id':     userId,
       },
       body:   JSON.stringify(body),
       // @ts-expect-error Next.js requires duplex for streaming proxy

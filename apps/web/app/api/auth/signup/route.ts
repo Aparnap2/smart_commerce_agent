@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     // Set HTTP-only cookie
     res.headers.set(
       'Set-Cookie',
-      `token=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${7 * 24 * 3600}`
+      `token=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 3600}`
     );
     
     return res;

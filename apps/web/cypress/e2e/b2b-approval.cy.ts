@@ -2,11 +2,11 @@
 // Uses REAL routes only: /chat, /admin/chat, /auth/login
 
 const EMPLOYEE = {
-  email: 'employee@acme.com',
+  email: 'employee@techtrend.com',
   pass:  'password123',
 }
 const MANAGER = {
-  email: 'manager@acme.com',
+  email: 'manager@techtrend.com',
   pass:  'password123',
 }
 
@@ -110,29 +110,10 @@ function mockBudgetAlertResponse() {
   ])
 }
 
-// Setup mock interceptors
+// Setup - use REAL LLM (no mocks)
 function setupMocks() {
-  // Mock catalog search
-  cy.intercept('GET', '**/assistants/*/threads/*/runs/*/stream', (req) => {
-    const url = req.url
-    if (url.includes('laptop') || url.includes('show me laptops') || url.includes('I need a')) {
-      req.reply({ statusCode: 200, body: mockCatalogResponse() })
-    } else if (url.includes('budget')) {
-      req.reply({ statusCode: 200, body: mockBudgetResponse() })
-    } else if (url.includes('approval')) {
-      req.reply({ statusCode: 200, body: mockApprovalsResponse() })
-    } else if (url.includes('MacBook Pro')) {
-      req.reply({ statusCode: 200, body: mockBudgetAlertResponse() })
-    } else {
-      req.reply({ statusCode: 200, body: mockCatalogResponse() })
-    }
-  }).as('mockStream')
-
-  // Also intercept POST to run endpoint
-  cy.intercept('POST', '**/assistants/*/threads/*/runs', {
-    statusCode: 200,
-    body: { run_id: 'mock-run', thread_id: 'mock-thread', assistant_id: 'customer' }
-  }).as('mockRun')
+  // Using real LLM - no interceptors
+  // The app will call actual API endpoints with deepseek-v3.2:cloud
 }
 
 function signIn(email: string, pass: string) {

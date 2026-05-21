@@ -1,7 +1,7 @@
 'use client';
 
-import { SessionProvider } from "next-auth/react";
-import { ReactNode, createContext, useContext } from "react";
+import { ReactNode, createContext, useContext, useState, useEffect } from "react";
+import { createBrowserClient } from '@supabase/ssr'
 import { usePRNotifications } from "@/hooks/usePRNotifications";
 
 const NotificationsContext = createContext<ReturnType<typeof usePRNotifications> | null>(null);
@@ -21,26 +21,61 @@ function NotificationsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * AuthProvider component - wraps the app to provide NextAuth session state
- */
-export function AuthProvider({ children }: { children: ReactNode }) {
+function AuthProviderInner({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:9999',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'anon'
+    )
+    
+    // Check for JWT token in cookie
+    const token = document.cookie.split('token=')[1]?.split(';')[0]
+    if (token) {
+      // Decode JWT to get user info (simplified)
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        setSession({ 
+          user: { 
+            id: payload.userId, 
+            email: payload.email 
+          } 
+        })
+      } catch (e) {
+        console.error('Failed to parse token:', e)
+      }
+    }
+    setLoading(false)
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      setLoading(false)
+    })
+    
+    return () => subscription.unsubscribe()
+  }, [])
+  
   return (
-    <SessionProvider>
-      <NotificationsProvider>
-        {children}
-      </NotificationsProvider>
-    </SessionProvider>
+    <NotificationsProvider>
+      {children}
+    </NotificationsProvider>
   );
 }
 
-// Re-implement simplified versions of hooks if they are used elsewhere
+/**
+ * AuthProvider - wraps the app with Supabase auth (replaced NextAuth)
+ */
+export function AuthProvider({ children }: { children: ReactNode }) {
+  return <AuthProviderInner>{children}</AuthProviderInner>;
+}
+
 export function useAuth() {
-  // This is a placeholder as useSession is more idiomatic in NextAuth
   return {};
 }
 
 export function useUser() {
-  // Use useSession() instead in components
   return null;
 }

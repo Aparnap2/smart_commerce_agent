@@ -1,13 +1,13 @@
 import os
 import json
 from typing import Annotated, TypedDict, Optional, Literal
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt, Command
 from loguru import logger
-from .tools import ALL_TOOLS
+from .tools import ALL_TOOLS, get_tools_for_role
 
 logger.add(
     "/tmp/agent.log",
@@ -15,6 +15,112 @@ logger.add(
     level="DEBUG",
     format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
 )
+
+
+def strip_ui_from_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """
+    Pattern 7: Avoid Context Failure - Strip __ui__ from tool results.
+    
+    The UI payload is for the frontend only - it should never re-enter 
+    the LLM's context to avoid context confusion and token bloat.
+    
+    Also strips embedding vectors which add noise to context.
+    """
+    stripped = []
+    for msg in messages:
+        # Only process ToolMessage with JSON content
+        if isinstance(msg, ToolMessage) and msg.content:
+            try:
+                parsed = json.loads(msg.content)
+                # Remove __ui__ (frontend only)
+                parsed.pop("__ui__", None)
+                # Remove embedding (not needed by LLM, saves tokens)
+                if "embedding" in parsed:
+                    parsed.pop("embedding", None)
+                # Also clean any nested embeddings in product arrays
+                if "products" in parsed and isinstance(parsed["products"], list):
+                    for item in parsed["products"]:
+                        if isinstance(item, dict):
+                            item.pop("embedding", None)
+                msg.content = json.dumps(parsed)
+            except json.JSONDecodeError:
+                # Non-JSON content, leave as-is
+                pass
+        stripped.append(msg)
+    return stripped
+
+
+def should_compress_context(messages: list[BaseMessage]) -> bool:
+    """
+    Pattern 8: Compress Context - check if context should be compressed.
+    
+    After submit_for_approval is called, the search-and-build history
+    is no longer needed. Summarize it to reduce context noise.
+    
+    Args:
+        messages: List of messages in the conversation
+        
+    Returns:
+        True if submit_for_approval was called (context should be compressed)
+    """
+    for msg in messages:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                if tc.get("name") == "submit_for_approval":
+                    return True
+    return False
+
+
+def create_context_summary(messages: list[BaseMessage]) -> str:
+    """
+    Create a concise summary of the conversation after PR submission.
+    
+    Replaces verbose tool message history with a single summary.
+    
+    Args:
+        messages: List of messages in the conversation
+        
+    Returns:
+        Summary string describing what was done
+    """
+    pr_number = None
+    total_amount = 0
+    item_count = 0
+    requestor = "unknown"
+    
+    # Extract key info from tool results
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            try:
+                content = json.loads(msg.content)
+                if content.get("prId"):
+                    pr_number = content.get("prId")
+                if content.get("total"):
+                    total_amount = content.get("total", 0)
+                if content.get("items"):
+                    item_count = len(content.get("items", []))
+                if content.get("requestor"):
+                    requestor = content.get("requestor")
+            except (json.JSONDecodeError, AttributeError):
+                pass
+    
+    # Also check tool calls for the requestor
+    for msg in messages:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                cfg = tc.get("args", {}).get("config", {})
+                if cfg and isinstance(cfg, dict):
+                    user_id = cfg.get("configurable", {}).get("user_id")
+                    if user_id:
+                        requestor = user_id
+    
+    if pr_number:
+        amount_str = f"₹{total_amount/100:.2f}" if total_amount else "amount TBD"
+        summary = f"[CONVERSATION SUMMARIZED] Employee {requestor} created PR {pr_number} with {item_count} item(s), total {amount_str}. Submitted for approval."
+    else:
+        summary = "[CONVERSATION SUMMARIZED] Purchase request submitted for approval."
+    
+    return summary
 
 
 class AgentState(TypedDict):
@@ -32,11 +138,22 @@ class AgentState(TypedDict):
     last_tool_result: Optional[dict]
 
 
-def get_llm():
-    """Get LLM from singleton - initialized once at startup via dependencies.py"""
+def get_llm(role: Optional[str] = None):
+    """Get LLM from singleton - initialized once at startup via dependencies.py
+    
+    Args:
+        role: Optional role for dynamic tool filtering. If None, uses ALL_TOOLS.
+    """
     from src.dependencies import get_llm as get_llm_singleton
     llm = get_llm_singleton()
     logger.debug(f"LLM from singleton: {llm.model_name}")
+    
+    # Pattern 3: Dynamic Agents - filter tools by role
+    if role:
+        tools = get_tools_for_role(role)
+        logger.debug(f"Role '{role}' filtered to {len(tools)} tools")
+        return llm.bind_tools(tools)
+    
     return llm.bind_tools(ALL_TOOLS)
 
 
@@ -163,8 +280,13 @@ Summary (3 sentences only):"""
 
 async def call_agent(state: AgentState):
     global llm
+    # Pattern 3: Dynamic Agents - pass role for role-specific tools
+    user_role = state.get("user_role")
     if llm is None:
-        llm = get_llm()
+        llm = get_llm(role=user_role)
+    elif user_role:
+        # Re-bind tools if role changed (e.g., after login)
+        llm = get_llm(role=user_role)
 
     user_email = state.get("user_id", "unknown")
     from src.dependencies import get_redis
@@ -176,9 +298,12 @@ async def call_agent(state: AgentState):
 
     system_msg = SystemMessage(content=build_system_prompt(user_email, dept_id))
 
+    # Pattern 7: Strip __ui__ from tool results before LLM context
+    clean_messages = strip_ui_from_messages(state["messages"])
+    
     messages = [
         system_msg,
-        *state["messages"],
+        *clean_messages,
     ]
 
     from langchain_core.runnables import RunnableConfig
@@ -260,14 +385,14 @@ def approval_gate_node(state: AgentState) -> Command[Literal["agent", END]]:
 def load_context_node(state: AgentState):
     """Load user's procurement context at conversation start."""
     import asyncpg
-    from src.dependencies import get_db_pool
+    from src.dependencies import get_pool
 
     user_id = state.get("user_id")
     if not user_id:
         return state
 
     async def _load():
-        pool = get_db_pool()
+        pool = get_pool()
         async with pool.acquire() as conn:
             # Get user's current draft PR
             draft_pr = await conn.fetchrow("""

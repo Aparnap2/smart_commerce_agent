@@ -1,6 +1,8 @@
-'use client'
+// CatalogGrid - GenUI component for displaying catalog items
+// Uses onAddToPR callback for agent integration (replaces direct fetch)
 
-import React, { type FC } from 'react'
+import React from 'react'
+import type { FC } from 'react'
 
 interface CatalogItem {
   id: string
@@ -15,13 +17,14 @@ interface CatalogItem {
 interface Props {
   items?: CatalogItem[]
   loading?: boolean
+  onAddToPR?: (item: CatalogItem) => Promise<void>
 }
 
 const statusBadge = (inStock: boolean) => inStock 
   ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">In Stock</span>
   : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Out of Stock</span>
 
-const CatalogGrid: FC<Props> = ({ items, loading }) => {
+const CatalogGrid: FC<Props> = ({ items, loading, onAddToPR }) => {
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
@@ -49,10 +52,11 @@ const CatalogGrid: FC<Props> = ({ items, loading }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+    <div data-testid="catalog-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
       {safeItems.map(item => (
         <div 
           key={item.id} 
+          data-testid="catalog-item"
           className="group relative bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-lg transition-all duration-200"
         >
           <div className="flex items-start justify-between mb-3">
@@ -80,6 +84,8 @@ const CatalogGrid: FC<Props> = ({ items, loading }) => {
           </div>
 
           <button 
+            data-testid={`add-to-pr-btn-${item.id}`}
+            onClick={() => onAddToPR?.(item)}
             className="mt-4 w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

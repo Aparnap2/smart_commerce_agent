@@ -1,6 +1,7 @@
-'use client'
+// ApprovalCard - GenUI component for PR approval workflow
+// Uses onSubmitDecision callback for agent integration (replaces direct fetch)
 
-import React, { useState } from 'react'
+import React from 'react'
 import type { FC } from 'react'
 
 interface LineItem {
@@ -11,6 +12,7 @@ interface LineItem {
 }
 
 interface Props {
+  // Main PR data object
   pr?: {
     id?: string
     prNumber?: string
@@ -21,8 +23,20 @@ interface Props {
     lineItems?: LineItem[]
     createdAt?: string
   }
+  // Direct B2B prop interface for easier usage
+  prId?: string
+  prNumber?: string
+  requestorName?: string
+  totalAmount?: number
+  lineItems?: LineItem[]
+  justification?: string
+  urgency?: string
+  threadId?: string
+  // Callbacks
   onApprove?: () => void
   onReject?: () => void
+  // Agent submission callback (replaces direct fetch)
+  onSubmitDecision?: (decision: 'APPROVED' | 'REJECTED', prNumber: string, total: number, comments: string) => Promise<void>
 }
 
 const urgencyColors: Record<string, string> = {
@@ -32,23 +46,53 @@ const urgencyColors: Record<string, string> = {
   CRITICAL: 'border-red-500 text-red-600',
 }
 
-const ApprovalCard: FC<Props> = ({ pr, onApprove, onReject }) => {
-  const [decision, setDecision] = useState<'APPROVED' | 'REJECTED' | null>(null)
-  const [comments, setComments] = useState('')
-  const [loading, setLoading] = useState(false)
-
+const ApprovalCard: FC<Props> = ({ 
+  pr, 
+  onApprove, 
+  onReject, 
+  prId, 
+  prNumber, 
+  requestorName, 
+  totalAmount, 
+  lineItems, 
+  justification, 
+  urgency, 
+  threadId,
+  onSubmitDecision 
+}) => {
+  const [decision, setDecision] = React.useState<'APPROVED' | 'REJECTED' | null>(null)
+  const [comments, setComments] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  
+  // Support both pr object and individual props
   const safePr = pr ?? {}
-  const safeTotal = safePr.total ?? 0
-  const safeItems = safePr.lineItems ?? []
-  const safeRequestor = safePr.requestedBy ?? 'Unknown'
+  const safeId = safePr.id ?? prId ?? ''
+  const safePrNumber = safePr.prNumber ?? prNumber ?? 'Pending'
+  const safeRequestor = safePr.requestedBy ?? requestorName ?? 'Unknown'
+  const safeDepartment = safePr.department ?? 'N/A'
+  const safeTotal = safePr.total ?? totalAmount ?? 0
+  const safeItems = safePr.lineItems ?? lineItems ?? []
+  const safeUrgency = safePr.status ?? urgency ?? 'NORMAL'
 
   const handleDecide = async (d: 'APPROVED' | 'REJECTED') => {
     setLoading(true)
-    console.log('Approving:', { prId: safePr.id, decision: d, comments })
-    setDecision(d)
-    setLoading(false)
-    if (d === 'APPROVED') onApprove?.()
-    else onReject?.()
+    console.log(`Decision: ${d}`, { prId: safeId, comments, threadId })
+    
+    try {
+      // Use onSubmitDecision callback for agent integration
+      // This REPLACES direct fetch() calls - agent communication via callback
+      if (onSubmitDecision) {
+        await onSubmitDecision(d, safePrNumber, safeTotal, comments)
+      }
+      
+      setDecision(d)
+      if (d === 'APPROVED') onApprove?.()
+      else onReject?.()
+    } catch (error) {
+      console.error('Failed to submit decision:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (decision) {
@@ -66,14 +110,14 @@ const ApprovalCard: FC<Props> = ({ pr, onApprove, onReject }) => {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
-            Purchase Request #{safePr.prNumber ?? 'Pending'}
+            Purchase Request #{safePrNumber}
           </h3>
           <p className="text-sm text-gray-500">
-            Requested by {safeRequestor} • {safePr.department ?? 'N/A'}
+            Requested by {safeRequestor} • {safeDepartment}
           </p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${urgencyColors[safePr.status ?? 'NORMAL']}`}>
-          {safePr.status ?? 'PENDING'}
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${urgencyColors[safeUrgency] ?? urgencyColors.NORMAL}`}>
+          {safeUrgency}
         </span>
       </div>
 
@@ -105,6 +149,7 @@ const ApprovalCard: FC<Props> = ({ pr, onApprove, onReject }) => {
 
       <div className="flex gap-2">
         <button
+          data-testid="approve-pr-btn"
           onClick={() => handleDecide('APPROVED')}
           disabled={loading}
           className="flex-1 bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
@@ -112,6 +157,7 @@ const ApprovalCard: FC<Props> = ({ pr, onApprove, onReject }) => {
           Approve
         </button>
         <button
+          data-testid="reject-pr-btn"
           onClick={() => handleDecide('REJECTED')}
           disabled={loading}
           className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50"
