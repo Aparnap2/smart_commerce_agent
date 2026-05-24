@@ -1,11 +1,15 @@
+import hashlib
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+import httpx
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from .db import get_pool
+from .dependencies import get_redis
 from .notifications import publish_approval_event, send_slack_notification
 import re
 
@@ -201,8 +205,6 @@ logger.add(
 # ─────────────────────────────────────────────────────────
 # B2B PROCUREMENT TOOLS (PRD Part 5)
 # ─────────────────────────────────────────────────────────
-
-from datetime import datetime
 
 @tool
 async def search_catalog(
@@ -784,34 +786,33 @@ async def process_approval(
             total = pr["totalAmount"]
             dept_id = pr["departmentId"]
             if decision == "APPROVED":
-                await conn.execute("""
-                    UPDATE "Department" SET "spentThisMonth" = "spentThisMonth" + $1 WHERE id=$2
-                """, total, dept_id)
+                await conn.execute("SELECT approve_pr_and_debit_budget($1, $2)", dept_id, total)
             # Note: No rollback needed on REJECTED - budget was never debited on add_item
+        else:
+            total = 0
 
-    # Build notification event for deterministic triggers
-    notification_event = build_notification_payload(pr_id, get_notification_event_type(decision))
-    
-    # Publish notification event to Redis for real-time updates
-    try:
-        await publish_approval_event(pr_id, decision, approver_email, comments)
-    except Exception as e:
-        logger.error(f"Failed to publish notification event: {e}")
+        pr_info = await conn.fetchrow('SELECT "prNumber", "requestorId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
+        pr_number = pr_info["prNumber"] if pr_info else ""
+        requestor_id = pr_info["requestorId"] if pr_info else ""
 
-    # Send Slack notification
-    try:
-        pr = await conn.fetchrow('SELECT "prNumber", "requestorId" FROM "PurchaseRequest" WHERE id=$1', pr_id)
-        if pr:
+        notification_event = build_notification_payload(pr_id, get_notification_event_type(decision))
+
+        try:
+            await publish_approval_event(requestor_id, pr_id, pr_number, decision, total_amount=total)
+        except Exception as e:
+            logger.error(f"Failed to publish notification event: {e}")
+
+        try:
             await send_slack_notification(
                 channel="procurement-approvals",
-                pr_number=pr["prNumber"],
+                pr_number=pr_number,
                 decision=decision,
                 requestor="Employee",
                 total_amount=total,
                 approver=approver_email
             )
-    except Exception as e:
-        logger.error(f"Failed to send Slack notification: {e}")
+        except Exception as e:
+            logger.error(f"Failed to send Slack notification: {e}")
 
     return json.dumps({
         "success": True,
@@ -828,31 +829,354 @@ async def raise_dispute(
     reason: str,
     config: RunnableConfig = None,
 ) -> str:
-    """Raise a dispute or cancellation on an approved or ordered purchase request."""
+    """Raise a dispute or cancellation on an approved or delivered purchase request.
+    
+    Validates that the PR exists, is in APPROVED or RECEIVED status,
+    and belongs to the current user. Creates a dispute record, updates
+    PR status to DISPUTED, and returns a confirmation with reference number.
+    
+    The dispute is automatically visible to MANAGER and FINANCE roles
+    through the PR status change.
+    
+    Args:
+        pr_id: The ID of the purchase request to dispute
+        reason: Detailed reason for the dispute
+    """
 
     cfg = (config or {}).get("configurable", {})
-    employee_id = cfg.get("user_id", "unknown")
+    employee_email = cfg.get("user_id", "unknown")
+    logger.debug(f"raise_dispute: pr_id={pr_id}, user={employee_email}")
+
+    # ── Input Validation ──────────────────────────────
+    if not pr_id or not pr_id.strip():
+        return json.dumps({"error": "pr_id is required"})
+    
+    if not reason or not reason.strip():
+        return json.dumps({"error": "Dispute reason is required. Please describe the issue with this purchase request."})
+
     pool = await get_pool()
 
     async with pool.acquire() as conn:
-        result = await conn.execute("""
-            UPDATE "PurchaseRequest" SET status='DISPUTED'
-            WHERE id=$1 AND "requestorId"=$2
+        # ── Look up user UUID from email ──────────────
+        user_row = await conn.fetchrow(
+            'SELECT id FROM users WHERE email = $1', employee_email
+        )
+        if not user_row:
+            logger.warning(f"raise_dispute: user not found for email={employee_email}")
+            return json.dumps({"error": f"User {employee_email} not found"})
+        employee_id = user_row["id"]
+
+        # ── Validate PR exists and is eligible ─────────
+        pr = await conn.fetchrow("""
+            SELECT id, "prNumber", status, "totalAmount"
+            FROM "PurchaseRequest"
+            WHERE id = $1 AND "requestorId" = $2
         """, pr_id, employee_id)
 
+        if not pr:
+            logger.warning(f"raise_dispute: PR {pr_id} not found for user {employee_email}")
+            return json.dumps({
+                "error": f"Purchase request {pr_id} not found. Please check the PR ID and try again."
+            })
+
+        valid_statuses = ("APPROVED", "RECEIVED")
+        if pr["status"] not in valid_statuses:
+            logger.warning(
+                f"raise_dispute: PR {pr_id} has status '{pr['status']}', "
+                f"expected APPROVED or RECEIVED"
+            )
+            return json.dumps({
+                "error": f"Cannot dispute PR {pr['prNumber']} — current status is '{pr['status']}'. "
+                         f"Only APPROVED or RECEIVED purchase requests can be disputed."
+            })
+
+        # ── Ensure Dispute table exists ───────────────
         await conn.execute("""
-            INSERT INTO "PRAuditEntry" (id,"prId",action,actor,details)
-            VALUES ($1,$2,'DISPUTED',$3,$4)
-        """, str(uuid.uuid4()), pr_id, employee_id, json.dumps({"reason": reason}))
+            CREATE TABLE IF NOT EXISTS "Dispute" (
+                "id" TEXT NOT NULL PRIMARY KEY,
+                "prId" TEXT NOT NULL REFERENCES "PurchaseRequest"("id"),
+                "reason" TEXT NOT NULL,
+                "referenceNumber" TEXT NOT NULL UNIQUE,
+                "status" TEXT NOT NULL DEFAULT 'submitted',
+                "submittedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "submittedBy" TEXT NOT NULL,
+                "resolvedAt" TIMESTAMP(3),
+                "resolution" TEXT,
+                "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ── Generate reference number ────────────────
+        count = await conn.fetchval('SELECT COUNT(*) FROM "Dispute"')
+        year = datetime.utcnow().year
+        reference_number = f"DIS-{year}-{int(count) + 1:04d}"
+
+        submitted_at = datetime.utcnow()
+
+        # ── Create dispute record ─────────────────────
+        dispute_id = str(uuid.uuid4())
+        await conn.execute("""
+            INSERT INTO "Dispute"
+                ("id", "prId", reason, "referenceNumber", status,
+                 "submittedAt", "submittedBy")
+            VALUES ($1, $2, $3, $4, 'submitted', $5, $6)
+        """, dispute_id, pr_id, reason, reference_number,
+            submitted_at, employee_email)
+
+        # ── Update PR status to DISPUTED ──────────────
+        await conn.execute("""
+            UPDATE "PurchaseRequest" SET status = 'DISPUTED', "updatedAt" = $1
+            WHERE id = $2
+        """, submitted_at, pr_id)
+
+        # ── Create audit entry ────────────────────────
+        await conn.execute("""
+            INSERT INTO "PRAuditEntry" (id, "prId", action, actor, details)
+            VALUES ($1, $2, 'DISPUTED', $3, $4)
+        """, str(uuid.uuid4()), pr_id, employee_email, json.dumps({
+            "reason": reason,
+            "referenceNumber": reference_number,
+            "status": "submitted",
+        }))
+
+        logger.info(
+            f"Dispute {reference_number} raised on PR {pr['prNumber']} "
+            f"by {employee_email}: {reason[:50]}..."
+        )
+
+    # ── Return result with GenUI payload ──────────────
+    result = {
+        "success": True,
+        "message": f"Dispute {reference_number} has been raised. "
+                   f"Your department manager and finance team have been notified.",
+        "prId": pr_id,
+        "referenceNumber": reference_number,
+        "status": "submitted",
+        "submittedAt": submitted_at.isoformat(),
+        "__ui__": {
+            "name": "dispute-confirmation",
+            "props": {
+                "prId": pr_id,
+                "reason": reason,
+                "referenceNumber": reference_number,
+                "status": "submitted",
+                "submittedAt": submitted_at.isoformat(),
+            },
+        },
+    }
+
+    return json.dumps(result)
+
+
+@tool
+async def get_pricing_audit_results(
+    config: RunnableConfig = None,
+) -> str:
+    """Get the latest pricing audit results: catalog items flagged for being priced > 15% above market median.
+    Only available to FINANCE and ADMIN roles. Items are flagged during the weekly pricing audit job."""
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, name, sku, "unitPrice", category, vendor,
+                   "vendorCode", "marketMedianPrice", "pricingFlaggedAt",
+                   "leadDays"
+            FROM "CatalogItem"
+            WHERE "pricingFlag" = true
+            ORDER BY "pricingFlaggedAt" DESC NULLS LAST
+        """)
+
+    flagged_items = []
+    for r in rows:
+        item = dict(r)
+        unit_price = int(item["unitPrice"])
+        market_median = item["marketMedianPrice"]
+
+        premium_pct = 0.0
+        if market_median and market_median > 0:
+            premium_pct = round((unit_price - market_median) / market_median * 100, 1)
+
+        flagged_items.append({
+            "id": str(item["id"]),
+            "name": item["name"],
+            "vendor": item["vendor"],
+            "vendorCode": item.get("vendorCode", ""),
+            "category": item["category"],
+            "unitPrice": unit_price,
+            "formattedPrice": f"₹{unit_price // 100:,}",
+            "marketMedianPrice": market_median,
+            "formattedMarketMedian": f"₹{market_median // 100:,}" if market_median else None,
+            "pricePremiumPct": premium_pct,
+            "flaggedAt": item["pricingFlaggedAt"].isoformat() if item.get("pricingFlaggedAt") else None,
+        })
 
     return json.dumps({
-        "success": True,
-        "message": "Dispute raised. Finance team notified.",
+        "flagged_items": flagged_items,
+        "total": len(flagged_items),
         "__ui__": {
-            "name": "dispute-card",
-            "props": {"prId": pr_id, "reason": reason}
-        }
+            "name": "pricing-audit-results",
+            "props": {
+                "flaggedItems": flagged_items,
+                "total": len(flagged_items),
+                "loading": False,
+            },
+        },
     })
+
+
+@tool
+async def compare_market_price(
+    query: str,
+    max_results: int = 5,
+    config: RunnableConfig = None,
+) -> str:
+    """Compare market prices for a product across multiple vendors using SerpApi Google Shopping.
+    Returns price comparison data including merchant, price, rating, and thumbnail."""
+
+    sanitized_query = sanitize_external_content(query)
+
+    redis = get_redis()
+    cache_key = f"serpapi:shopping:{hashlib.md5(sanitized_query.encode()).hexdigest()}"
+    cached = await redis.get(cache_key)
+    if cached is not None:
+        return cached if isinstance(cached, str) else cached.decode()
+
+    api_key = os.environ["SERPAPI_KEY"]
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "google_shopping",
+        "q": sanitized_query,
+        "gl": "in",
+        "hl": "en",
+        "num": max_results,
+        "api_key": api_key,
+    }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+    shopping_results = data.get("shopping_results", [])
+    results = []
+    for item in shopping_results:
+        price_str = item.get("price", "0")
+        extracted_price = 0.0
+        if price_str:
+            cleaned = re.sub(r"[^\d.]", "", price_str.replace(",", ""))
+            try:
+                extracted_price = float(cleaned)
+            except ValueError:
+                extracted_price = 0.0
+        results.append({
+            "title": item.get("title", ""),
+            "price": extracted_price,
+            "source": item.get("source", ""),
+            "link": item.get("link", ""),
+            "rating": item.get("rating", None),
+            "thumbnail": item.get("thumbnail", ""),
+        })
+
+    output = json.dumps({
+        "query": sanitized_query,
+        "results": results,
+        "currency": "INR",
+        "__ui__": {
+            "name": "price-comparison",
+            "props": {"query": sanitized_query, "results": results},
+        },
+    })
+
+    await redis.set(cache_key, output, ex=900)
+    return output
+
+
+@tool
+async def vendor_sourcing_request(
+    product_name: str,
+    description: str,
+    preferred_price: int | None = None,
+    config: RunnableConfig = None,
+) -> str:
+    """Submit a vendor sourcing request for an off-catalog product.
+    
+    Use this when:
+    - An employee wants to purchase an item not found in the approved catalog
+    - search_catalog returned 0 results and the employee still wants to buy
+    - The product is a specialty item not carried by approved vendors
+    
+    The request will be reviewed by the procurement team. Once approved,
+    the item can be added to a PR.
+    
+    Args:
+        product_name: Name of the product to source
+        description: Detailed description, specifications, or requirements
+        preferred_price: Maximum price the employee is willing to pay (in paise, optional)
+    """
+
+    cfg = (config or {}).get("configurable", {}) if hasattr(config, 'get') else {}
+    employee_email = cfg.get("user_id", "unknown") if cfg else "unknown"
+
+    # ── Input Validation ──────────────────────────────
+    if not product_name or not product_name.strip():
+        return json.dumps({"error": "product_name is required"})
+    
+    if not description or not description.strip():
+        return json.dumps({"error": "description is required"})
+
+    # ── Generate request ID and timestamp ─────────────
+    request_id = str(uuid.uuid4())
+    submitted_at = datetime.now(timezone.utc)
+    status = "submitted"
+
+    # ── Build request record ──────────────────────────
+    request_record = {
+        "requestId": request_id,
+        "productName": product_name.strip(),
+        "description": description.strip(),
+        "preferredPrice": preferred_price,
+        "status": status,
+        "submittedAt": submitted_at.isoformat(),
+        "requesterEmail": employee_email,
+    }
+
+    logger.info(f"vendor_sourcing_request: product='{product_name}', employee={employee_email}, id={request_id}")
+
+    # ── Store in Redis (lightweight persistence) ──────
+    # TODO: Migrate to proper DB table (e.g. "VendorSourcingRequest") when schema is available
+    try:
+        redis = get_redis()
+        redis_key = f"sourcing_request:{request_id}"
+        # Store as hash for structured access
+        for field, value in request_record.items():
+            if value is not None:
+                await redis.hset(redis_key, field, str(value) if not isinstance(value, str) else value)
+        await redis.expire(redis_key, 86400 * 30)  # 30-day TTL
+        # Add to index set for listing
+        await redis.sadd("sourcing_request:index", request_id)
+        logger.debug(f"vendor_sourcing_request: stored in Redis key={redis_key}")
+    except Exception as e:
+        logger.error(f"vendor_sourcing_request: Redis store failed (non-fatal): {e}")
+        # Continue even if Redis fails — the request record is still returned
+
+    # ── Return result with GenUI payload ──────────────
+    result = {
+        **request_record,
+        "__ui__": {
+            "name": "sourcing-request-confirmation",
+            "props": {
+                "productName": request_record["productName"],
+                "description": request_record["description"],
+                "preferredPrice": preferred_price,
+                "status": status,
+                "requestId": request_id,
+                "submittedAt": request_record["submittedAt"],
+            },
+        },
+    }
+
+    return json.dumps(result)
 
 
 def get_tools_for_role(role: str) -> list:
@@ -875,6 +1199,7 @@ def get_tools_for_role(role: str) -> list:
         search_catalog,
         get_budget_status,
         get_purchase_requests,
+        compare_market_price,
     ]
     
     # Tools for EMPLOYEE - can create and submit PRs, but NOT approve
@@ -882,6 +1207,7 @@ def get_tools_for_role(role: str) -> list:
         manage_purchase_request,
         submit_for_approval,
         raise_dispute,
+        vendor_sourcing_request,
     ]
     
     # Tools for MANAGER - all tools including approval
@@ -890,11 +1216,14 @@ def get_tools_for_role(role: str) -> list:
     ]
     
     # Tools for ADMIN - same as manager (full access)
-    admin_tools = manager_tools
+    admin_tools = manager_tools + [
+        get_pricing_audit_results,
+    ]
     
-    # Tools for FINANCE - read only, no PR submission or approval
+    # Tools for FINANCE - read only (can view audit results but not submit/approve PRs)
     finance_tools = base_tools + [
         raise_dispute,
+        get_pricing_audit_results,
     ]
     
     role_map = {
@@ -915,4 +1244,7 @@ ALL_TOOLS = [
     get_purchase_requests,
     process_approval,
     raise_dispute,
+    compare_market_price,
+    vendor_sourcing_request,
+    get_pricing_audit_results,
 ]

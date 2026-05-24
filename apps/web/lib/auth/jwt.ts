@@ -3,18 +3,29 @@
  * 
  * Custom JWT implementation replacing Supabase Auth.
  * Uses jose for sign/verify operations.
+ * 
+ * Supports both B2C (SHOPPER/MERCHANT/SUPPORT/ADMIN) and
+ * B2B procurement (EMPLOYEE/MANAGER/FINANCE/ADMIN) roles.
  */
 
 import { SignJWT, jwtVerify, JWTVerifyResult } from 'jose';
 
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 
+/** B2C e-commerce roles */
 export type Role = 'SHOPPER' | 'MERCHANT' | 'SUPPORT' | 'ADMIN';
+
+/** B2B procurement roles */
+export type B2BRole = 'EMPLOYEE' | 'MANAGER' | 'FINANCE' | 'ADMIN';
+
+/** Union of all application roles */
+export type AppRole = Role | B2BRole;
 
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: Role;
+  role: AppRole;
+  departmentId?: string | null;
 }
 
 /**

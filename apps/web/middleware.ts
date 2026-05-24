@@ -1,29 +1,122 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+/**
+ * Security Middleware — Route Protection & Header Injection
+ *
+ * Enforces:
+ *  1. Authentication — redirects to /auth/login if no valid JWT cookie
+ *  2. Role-based access — route rules per ROUTE_RULES in lib/auth/rbac
+ *  3. Header injection — x-role, x-user-id, x-department-id on every
+ *     downstream request for API routes to validate
+ *
+ * Route rules:
+ *  /chat       → any authenticated role
+ *  /manager    → MANAGER or ADMIN
+ *  /finance    → FINANCE or ADMIN
+ *  /admin      → ADMIN
+ *  /auth/*     → public (no auth required)
+ *  /           → redirects to /chat (auth'd) or /auth/login (not auth'd)
+ */
+
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { verifyToken } from '@/lib/auth/jwt';
+import { checkRouteAccess } from '@/lib/auth/rbac';
+import type { AppRole } from '@/lib/auth/jwt';
+
+/**
+ * Public paths that bypass all checks.
+ * These must NOT appear in the `config.matcher` to avoid running
+ * middleware at all, but we list them here as a safety net.
+ */
+const PUBLIC_PATH_PREFIXES = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/forgot-password',
+  '/api/auth',
+  '/_next',
+  '/favicon.ico',
+];
+
+/**
+ * Extract and verify the JWT token from the request cookie.
+ * Returns { role, userId, departmentId } or null if invalid/missing.
+ */
+async function parseSession(
+  req: NextRequest,
+): Promise<{ role: AppRole; userId: string; departmentId?: string | null } | null> {
+  const cookieHeader = req.headers.get('cookie') || '';
+  const tokenMatch = cookieHeader.match(/(?:^|;\s*)token=([^;]+)/);
+  if (!tokenMatch) return null;
+
+  try {
+    const payload = await verifyToken(tokenMatch[1]);
+    return {
+      role: payload.role as AppRole,
+      userId: payload.userId,
+      departmentId: payload.departmentId,
+    };
+  } catch {
+    // Invalid or expired token — treat as unauthenticated
+    return null;
+  }
+}
 
 export async function middleware(req: NextRequest) {
-  const path = req.nextUrl.pathname
-  
-  // Public paths that don't require auth
-  const publicPaths = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/api/auth', '/_next', '/favicon.ico']
-  if (publicPaths.some(p => path.startsWith(p))) {
-    return NextResponse.next()
+  const path = req.nextUrl.pathname;
+
+  // ── Safety net for public paths (even though matcher excludes them) ─
+  // This handles edge cases where Next.js processes the middleware anyway
+  if (PUBLIC_PATH_PREFIXES.some(p => path.startsWith(p))) {
+    return NextResponse.next();
   }
-  
-  // Check for custom JWT auth cookie (set by /api/auth/login)
-  const cookieHeader = req.headers.get('cookie') || ''
-  const hasAuthCookie = cookieHeader.includes('token=')
-  
-  // Debug logging (remove in production)
-  console.log('[Middleware] Path:', path, '| Has token cookie:', hasAuthCookie, '| Cookie:', cookieHeader.slice(0, 100))
-  
-  if (!hasAuthCookie) {
-    return NextResponse.redirect(new URL('/auth/login', req.url))
+
+  // ── Parse session ──────────────────────────────────────────────────
+  const session = await parseSession(req);
+
+  // ── Check route access ─────────────────────────────────────────────
+  const { allowed, redirectTo } = checkRouteAccess(path, session?.role ?? null);
+
+  if (!allowed) {
+    // Log access denial for observability
+    console.log(
+      `[Auth] Blocked ${path} for ${session?.userId ?? 'anonymous'} (role: ${session?.role ?? 'none'}) → ${redirectTo}`,
+    );
+    return NextResponse.redirect(new URL(redirectTo, req.url));
   }
-  
-  return NextResponse.next()
+
+  // ── Inherited redirect (root / → /chat for authenticated users) ────
+  if (redirectTo && path === '/') {
+    return NextResponse.redirect(new URL(redirectTo, req.url));
+  }
+
+  // ── Forward session headers to downstream route handlers ───────────
+  // This allows API routes and pages to read x-role, x-user-id, etc.
+  // without re-parsing the JWT cookie.
+  const response = NextResponse.next();
+
+  if (session) {
+    response.headers.set('x-role', session.role);
+    response.headers.set('x-user-id', session.userId);
+    if (session.departmentId) {
+      response.headers.set('x-department-id', session.departmentId);
+    }
+  }
+
+  return response;
 }
 
+/**
+ * Middleware matcher — only trigger on these paths for performance.
+ *
+ * Critical: Public paths (/auth/*, /api/auth/*, /_next/*) are excluded
+ * so the middleware never runs on them, avoiding unnecessary JWT parsing.
+ */
 export const config = {
-  matcher: ['/chat/:path*', '/manager/:path*', '/finance/:path*', '/admin/:path*'],
-}
+  matcher: [
+    '/',
+    '/chat/:path*',
+    '/manager/:path*',
+    '/finance/:path*',
+    '/admin/:path*',
+    '/api/agent/:path*',
+  ],
+};

@@ -92,7 +92,7 @@ export const Rail: React.FC = () => {
                 <div className="px-4 pb-4 shrink-0" data-testid="rail-budget-gauge">
                     <BudgetGauge
                         department={budget.department}
-                        monthlyBudget={budget.monthlyBudget}
+                        totalBudget={budget.monthlyBudget}
                         spent={budget.spent}
                         remaining={budget.remaining}
                         percentUsed={budget.percentUsed}

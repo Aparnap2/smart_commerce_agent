@@ -43,17 +43,11 @@ async def close_test_pool(pool):
 
 
 def setup_pool_for_tools(pool):
-    """Patch src modules to use our pool."""
-    import src.db as src_db
+    """Set dependencies._db_pool so tools can use our pool.
+    All tool functions go through dependencies.get_pool_singleton.
+    """
     import src.dependencies as src_deps
-    import src.tools as src_tools
-    
-    async def async_get_pool():
-        return pool
-    
-    src_db.get_pool = async_get_pool
-    src_deps.get_pool_singleton = lambda: pool
-    src_tools.get_pool = async_get_pool
+    src_deps._db_pool = pool
 
 
 def create_unique_test_data(prefix):
@@ -70,6 +64,7 @@ def create_unique_test_data(prefix):
 # =============================================================================
 # TEST 1: Budget - add_item spends budget
 # =============================================================================
+@pytest.mark.xfail(reason="Old behavior: add_item no longer debits budget; debit happens on APPROVED")
 @pytest.mark.asyncio
 async def test_add_item_increments_spent_this_month():
     """Verify add_item increments spentThisMonth."""

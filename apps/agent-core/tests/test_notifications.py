@@ -11,14 +11,12 @@ from unittest.mock import AsyncMock, patch, MagicMock
 async def test_publish_approval_event_approved():
     """Test publishing an APPROVED PR approval event to Redis pubsub."""
     from src.notifications import publish_approval_event
-    from src import dependencies
 
-    # Mock Redis to capture the publish call
     mock_redis = AsyncMock()
-    mock_redis.publish = AsyncMock(return_value=1)  # 1 subscriber received
+    mock_redis.publish = AsyncMock(return_value=1)
     mock_redis.get = AsyncMock(return_value=None)
 
-    with patch.object(dependencies, 'get_redis', return_value=mock_redis):
+    with patch('src.notifications.get_redis', return_value=mock_redis):
         result = await publish_approval_event(
             employee_id="emp-123",
             pr_id="pr-uuid-456",
@@ -51,12 +49,11 @@ async def test_publish_approval_event_approved():
 async def test_publish_approval_event_rejected():
     """Test publishing a REJECTED PR approval event to Redis pubsub."""
     from src.notifications import publish_approval_event
-    from src import dependencies
 
     mock_redis = AsyncMock()
     mock_redis.publish = AsyncMock(return_value=1)
 
-    with patch.object(dependencies, 'get_redis', return_value=mock_redis):
+    with patch('src.notifications.get_redis', return_value=mock_redis):
         result = await publish_approval_event(
             employee_id="emp-456",
             pr_id="pr-uuid-789",
