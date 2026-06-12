@@ -167,12 +167,14 @@ class MockSalesforceClient:
     Mock Salesforce client for development and testing.
 
     Returns realistic mock data structures for all Salesforce operations.
-    Use mode='mock' for testing, mode='live' for future real API integration.
+    Use mode='mock' for in-memory data (fast, no network), mode='http'
+    for real HTTP calls to Mockoon or a real Salesforce API.
 
     Args:
         api_key: Optional Salesforce API key (for future live mode)
         instance_url: Optional Salesforce instance URL (for future live mode)
-        mode: 'mock' (default) or 'live'
+        mode: 'mock' (default) or 'http'
+        base_url: Base URL for HTTP mode (default http://localhost:3002/api/salesforce)
     """
 
     def __init__(
@@ -293,6 +295,15 @@ class MockSalesforceClient:
         Raises:
             ValueError: If case_id is unknown
         """
+        if self.mode == "http":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/cases/{case_id}")
+                if response.status_code == 404:
+                    raise ValueError(f"Case not found: {case_id}")
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         # Check stored cases first
         if case_id in self._cases_store:
             return self._cases_store[case_id].copy()
@@ -313,7 +324,19 @@ class MockSalesforceClient:
 
         Returns:
             Dict with 'account' and 'contact' keys
+
+        Raises:
+            ValueError: If account_id is unknown
         """
+        if self.mode == "http":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/accounts/{account_id}")
+                if response.status_code == 404:
+                    raise ValueError(f"Account not found: {account_id}")
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         # Derive a consistent index from the account_id
         index = abs(hash(account_id)) % len(_COMPANY_NAMES)
 
@@ -361,6 +384,15 @@ class MockSalesforceClient:
         Returns:
             List of matching knowledge article dicts
         """
+        if self.mode == "http":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/knowledge-base", params={"q": query}
+                )
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         query_lower = query.lower()
         results = []
         for article in _KNOWLEDGE_ARTICLES:
@@ -471,6 +503,19 @@ class MockSalesforceClient:
         Returns:
             The newly created case dict
         """
+        if self.mode == "http":
+            payload = {
+                "subject": subject,
+                "description": description,
+                "priority": priority,
+                "accountId": account_id,
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(f"{self.base_url}/cases", json=payload)
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         now = datetime.now(timezone.utc).isoformat()
         case_id = str(uuid.uuid4())
 
@@ -514,6 +559,17 @@ class MockSalesforceClient:
         Raises:
             ValueError: If case_id is unknown
         """
+        if self.mode == "http":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.patch(
+                    f"{self.base_url}/cases/{case_id}", json=fields
+                )
+                if response.status_code == 404:
+                    raise ValueError(f"Case not found: {case_id}")
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         now = datetime.now(timezone.utc).isoformat()
 
         # Check stored cases first
@@ -535,7 +591,7 @@ class MockSalesforceClient:
         raise ValueError(f"Case not found: {case_id}")
 
     async def escalate_case(
-        self, case_id: str, reason: str
+        self, case_id: str, reason: str, requested_action: str | None = None
     ) -> dict[str, Any]:
         """
         Escalate a case with a reason.
@@ -543,6 +599,7 @@ class MockSalesforceClient:
         Args:
             case_id: The case ID to escalate
             reason: The reason for escalation
+            requested_action: Optional requested action for the escalation
 
         Returns:
             Escalation result dict
@@ -550,6 +607,20 @@ class MockSalesforceClient:
         Raises:
             ValueError: If case_id is unknown
         """
+        if self.mode == "http":
+            payload: dict[str, str] = {"reason": reason}
+            if requested_action:
+                payload["requestedAction"] = requested_action
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/cases/{case_id}/escalate", json=payload
+                )
+                if response.status_code == 404:
+                    raise ValueError(f"Case not found: {case_id}")
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
         # Validate case_id exists
         try:
             await self.get_case_details(case_id)

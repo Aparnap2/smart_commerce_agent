@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token  =
-    req.headers.get('authorization') ??
+    req.headers.get('authorization') ||
     `Bearer ${req.cookies.get('token')?.value ?? ''}`
 
   // ── Rate limit per user ─────────────────────────────────────────────

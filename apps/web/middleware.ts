@@ -4,23 +4,17 @@
  * Enforces:
  *  1. Authentication — redirects to /auth/login if no valid JWT cookie
  *  2. Role-based access — route rules per ROUTE_RULES in lib/auth/rbac
- *  3. SupportPilot role-based access — additive check via checkSupportRouteAccess
+ *  3. SupportPilot role-based access — check via checkSupportRouteAccess
  *  4. Header injection — x-role, x-user-id, x-department-id, x-org-id, x-sf-org
  *     on every downstream request for API routes to validate
  *
- * Procurement route rules:
- *  /chat       → any authenticated role
- *  /manager    → MANAGER or ADMIN
- *  /finance    → FINANCE or ADMIN
- *  /admin      → ADMIN
- *  /auth/*     → public (no auth required)
- *  /           → redirects to /chat (auth'd) or /auth/login (not auth'd)
- *
- * SupportPilot route rules (additive):
+ * SupportPilot route rules:
  *  /support    → SUPPORT_AGENT, TEAM_LEAD, SUPPORT_OPS, ADMIN
  *  /team-lead  → TEAM_LEAD, ADMIN
  *  /support-ops→ SUPPORT_OPS, ADMIN
  *  /admin      → ADMIN
+ *  /auth/*     → public (no auth required)
+ *  /           → redirects to /support (auth'd) or /auth/login (not auth'd)
  */
 
 import { NextResponse } from 'next/server';
@@ -81,7 +75,7 @@ export async function middleware(req: NextRequest) {
   // ── Parse session ──────────────────────────────────────────────────
   const session = await parseSession(req);
 
-  // ── Check route access (procurement rules) ─────────────────────────
+  // ── Check route access ─────────────────────────────────────────────
   const { allowed, redirectTo } = checkRouteAccess(path, session?.role ?? null);
 
   if (!allowed) {
@@ -97,7 +91,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(redirectTo, req.url));
   }
 
-  // ── Support route check (additive — falls back to procurement check) ─
+  // ── Support route check ────────────────────────────────────────────
   const supportRouteMatch = Object.keys(SUPPORT_ROUTES).some(route =>
     path === route || path.startsWith(route + '/'),
   );
@@ -144,8 +138,6 @@ export const config = {
   matcher: [
     '/',
     '/chat/:path*',
-    '/manager/:path*',
-    '/finance/:path*',
     '/admin/:path*',
     '/api/agent/:path*',
     '/support/:path*',

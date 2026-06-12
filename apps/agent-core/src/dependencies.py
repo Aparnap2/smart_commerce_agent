@@ -4,7 +4,6 @@ Critical for performance: avoid creating new DB/LLM clients per request.
 """
 import asyncpg
 import redis.asyncio as aioredis
-from langchain_openai import ChatOpenAI
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import os
@@ -24,98 +23,9 @@ except ImportError:
 # ── Module-level singletons ──────────────────────
 _db_pool: asyncpg.Pool | None = None
 _redis: aioredis.Redis | None = None
-_llm: "ChatOpenAI | MockLLM | None" = None
+_llm: "Any | None" = None
 _langfuse: Langfuse | None = None
 _salesforce_client: "MockSalesforceClient | None" = None
-
-
-class MockLLM:
-    """Mock LLM for testing without real LLM calls."""
-
-    model_name = "mock-llm"
-
-    def __init__(self):
-        self._mock_responses = {
-            "laptop": {
-                "content": "Here are the laptops available in our catalog:",
-                "__ui__": {
-                    "name": "catalog-grid",
-                    "props": {
-                        "items": [
-                            {"id": "1", "name": "MacBook Pro 14\"", "price": 199900, "category": "HARDWARE", "image": "https://example.com/mbp.jpg", "inStock": True},
-                            {"id": "2", "name": "Dell XPS 15", "price": 149900, "category": "HARDWARE", "image": "https://example.com/xps.jpg", "inStock": True},
-                            {"id": "3", "name": "ThinkPad X1 Carbon", "price": 129900, "category": "HARDWARE", "image": "https://example.com/thinkpad.jpg", "inStock": True},
-                            {"id": "4", "name": "HP Spectre x360", "price": 119900, "category": "HARDWARE", "image": "https://example.com/spectre.jpg", "inStock": False},
-                        ],
-                        "loading": False,
-                    },
-                },
-            },
-            "budget": {
-                "content": "Your department budget status:",
-                "__ui__": {
-                    "name": "budget-gauge",
-                    "props": {
-                        "totalBudget": 5000000,
-                        "spent": 3250000,
-                        "remaining": 1750000,
-                        "percentUsed": 65,
-                        "categoryBreakdown": [
-                            {"category": "HARDWARE", "spent": 2000000, "budget": 3000000},
-                            {"category": "SOFTWARE", "spent": 800000, "budget": 1000000},
-                            {"category": "SERVICES", "spent": 450000, "budget": 1000000},
-                        ],
-                    },
-                },
-            },
-            "pr": {
-                "content": "I've created a draft PR for your review:",
-                "__ui__": {
-                    "name": "pr-draft",
-                    "props": {
-                        "prNumber": "PR-2026-0042",
-                        "status": "DRAFT",
-                        "requestor": "john.doe@company.com",
-                        "items": [
-                            {"name": "MacBook Pro 14\"", "quantity": 2, "totalPrice": 399800},
-                            {"name": "Dell Monitor 27\"", "quantity": 4, "totalPrice": 199600},
-                        ],
-                        "total": 599400,
-                        "justification": "Engineering team upgrade for Q2 projects",
-                        "createdAt": "2026-05-20T10:30:00Z",
-                    },
-                },
-            },
-        }
-
-    async def ainvoke(self, messages, config=None):
-        """Return mock response based on last user message."""
-        from langchain_core.messages import AIMessage
-        import json
-
-        last_msg = messages[-1] if messages else None
-        user_message = ""
-        if hasattr(last_msg, "content"):
-            user_message = last_msg.content.lower()
-
-        response_data = None
-        if any(k in user_message for k in ["laptop", "laptops", "computer", "macbook", "dell", "thinkpad"]):
-            response_data = self._mock_responses["laptop"]
-        elif any(k in user_message for k in ["budget", "spending", "funds", "remaining"]):
-            response_data = self._mock_responses["budget"]
-        elif any(k in user_message for k in ["pr", "purchase request", "create pr", "draft"]):
-            response_data = self._mock_responses["pr"]
-        else:
-            response_data = {
-                "content": "This is a mock response. Try asking about 'laptops', 'budget', or 'create pr'.",
-                "__ui__": None,
-            }
-
-        content = json.dumps(response_data)
-        return AIMessage(content=content)
-
-    def bind_tools(self, tools):
-        return self
 
 
 def init_salesforce_client(
@@ -159,10 +69,11 @@ async def lifespan(app: FastAPI):
     """Initialize all clients ONCE at startup."""
     global _db_pool, _redis, _llm, _salesforce_client
 
-    mock_llm = os.environ.get("MOCK_LLM", "false").lower() == "true"
-    print(f"🔧 MOCK_LLM={mock_llm}")
+    provider = os.environ.get("LLM_PROVIDER", "cohere").lower().strip()
+    is_mock = provider == "mock"
+    print(f"🔧 LLM_PROVIDER={provider}")
 
-    if not mock_llm:
+    if not is_mock:
         database_url = os.environ.get("DATABASE_URL")
         if not database_url:
             raise RuntimeError("DATABASE_URL not set")
@@ -183,21 +94,9 @@ async def lifespan(app: FastAPI):
             )
             print(f"✅ Redis initialized")
 
-    if mock_llm:
-        _llm = MockLLM()
-        print(f"✅ Mock LLM initialized (MOCK_LLM=true)")
-    else:
-        llm_model = os.environ.get("OLLAMA_MODEL", "nemotron-3-super:cloud")
-        llm_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-        llm_api_key = os.environ.get("OLLAMA_API_KEY", "ollama")
+    from src.llm_config import create_llm
 
-        _llm = ChatOpenAI(
-            model=llm_model,
-            temperature=0,
-            base_url=llm_base_url,
-            api_key=llm_api_key,
-        )
-        print(f"✅ LLM initialized: {llm_model}")
+    _llm = create_llm()
 
     if LANGFUSE_AVAILABLE:
         global _langfuse
@@ -232,7 +131,7 @@ def get_redis() -> aioredis.Redis:
     return _redis
 
 
-def get_llm() -> "ChatOpenAI | MockLLM":
+def get_llm() -> "Any":
     if _llm is None:
         raise RuntimeError("LLM not initialized - ensure lifespan is used")
     return _llm
@@ -244,19 +143,18 @@ def get_langfuse() -> "Langfuse | None":
 
 
 def get_langfuse_metadata(config: dict = None) -> dict:
-    """Get Langfuse metadata from config for tracing (PRD Part 9)."""
+    """Get Langfuse metadata from config for tracing."""
     if not config:
-        return {"app": "procureai"}
+        return {"app": "supportpilot"}
     
-    # Handle non-dict config - return default app only
     if not isinstance(config, dict):
-        return {"app": "procureai"}
+        return {"app": "supportpilot"}
     
     cfg = config.get("configurable", {}) if isinstance(config, dict) else {}
     return {
         "department_id": cfg.get("department_id", "unknown"),
         "role": cfg.get("role", "unknown"),
-        "app": "procureai",
+        "app": "supportpilot",
     }
 
 

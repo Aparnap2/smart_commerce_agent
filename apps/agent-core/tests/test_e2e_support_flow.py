@@ -66,13 +66,13 @@ def _setup_llm() -> bool:
 
     llm_model = os.environ.get("OLLAMA_MODEL")
     llm_base_url = os.environ.get("OLLAMA_BASE_URL")
-    llm_api_key = os.environ.get("OLLAMA_API_KEY")
+    llm_api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OLLAMA_API_KEY")
 
     if not all([llm_model, llm_base_url, llm_api_key]):
         missing = [k for k, v in [
             ("OLLAMA_MODEL", llm_model),
             ("OLLAMA_BASE_URL", llm_base_url),
-            ("OLLAMA_API_KEY", llm_api_key),
+            ("OPENROUTER_API_KEY", llm_api_key),
         ] if not v]
         print(f"  ⚠ Missing env vars: {', '.join(missing)}")
         return False

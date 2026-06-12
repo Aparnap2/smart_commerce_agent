@@ -1,103 +1,101 @@
 """
-Pattern 14: Eval Test Suite - LLM-as-judge evaluation for agent responses
+Eval Test Suite for SupportPilot — LLM-as-judge evaluation for support agent responses.
 
-Binary (pass/fail) scoring for ProcureAI agent behaviors.
-Covers the 6 failure modes:
-- Wrong tool selection
-- Budget hallucination
-- PR number collision  
-- HITL thread lost
-- GenUI null crash
+Covers support-specific failure modes:
+- Wrong tool selection (calling escalate as SUPPORT_AGENT)
+- Case creation before search (creating duplicates)
+- Missing customer context lookup
+- GenUI null fields
 - Context confusion
 """
 
 from typing import Any
 
 
-# Evaluation cases based on the book
+# Evaluation cases for support-only agent
 EVAL_CASES = [
     {
-        "name": "employee_approval_attempt",
-        "input": "Approve PR-2026-0042",
-        "expected_tools": ["process_approval"],
-        "must_not_call": ["process_approval"],  # EMPLOYEE cannot call this
-        "role": "EMPLOYEE",
+        "name": "agent_cannot_escalate",
+        "input": "Escalate case 500ABC to urgent",
+        "expected_tools": ["escalate_case"],
+        "must_not_call": ["escalate_case"],
+        "role": "SUPPORT_AGENT",
         "expected_outcome": "error — role insufficient",
         "failure_mode": "wrong_tool_selection",
     },
     {
-        "name": "over_budget_submission",
-        "input": "Buy 10 Herman Miller chairs",  # ₹9,50,000 × 10 = way over budget
-        "expected_ui": "budget-alert",
-        "must_not_call": ["submit_for_approval"],  # Should block
-        "role": "EMPLOYEE",
-        "expected_outcome": "budget_exceeded",
-        "failure_mode": "budget_hallucination",
+        "name": "team_lead_can_escalate",
+        "input": "Escalate case 500ABC to urgent",
+        "expected_tools": ["escalate_case"],
+        "role": "TEAM_LEAD",
+        "expected_outcome": "case_escalated",
+        "failure_mode": "none",
     },
     {
-        "name": "pr_creation",
-        "input": "I need a laptop for the new hire",
-        "expected_tools": ["manage_purchase_request"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "pr_created",
-        "failure_mode": "pr_number_collision",
-    },
-    {
-        "name": "submit_triggers_approval",
-        "input": "Submit my PR for approval",
-        "expected_tools": ["submit_for_approval"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "thread_persisted",
-        "failure_mode": "hitl_thread_lost",
-    },
-    {
-        "name": "genui_null_price",
-        "input": "Show me the laptop price",
-        "expected_tools": ["search_catalog"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "price_defined",
-        "failure_mode": "genui_null_crash",
-    },
-    {
-        "name": "context_wrong_item",
-        "input": "Add the Dell monitor to my cart",
-        "expected_tools": ["manage_purchase_request"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "correct_item_added",
-        "failure_mode": "context_confusion",
-    },
-    {
-        "name": "finance_role_restrictions",
-        "input": "Submit this PR for approval",
-        "expected_tools": ["search_catalog", "get_budget_status"],
-        "must_not_call": ["submit_for_approval"],
-        "role": "FINANCE",
-        "expected_outcome": "action_blocked",
+        "name": "search_before_create",
+        "input": "I have a billing issue with my account",
+        "expected_tools": ["search_salesforce_cases"],
+        "must_not_call": ["create_case"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "search_performed",
         "failure_mode": "wrong_tool_selection",
     },
     {
-        "name": "employee_search",
-        "input": "Show me available laptops",
-        "expected_tools": ["search_catalog"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "catalog_displayed",
+        "name": "get_customer_context_on_query",
+        "input": "What's the status for Acme Corp?",
+        "expected_tools": ["get_customer_context"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "context_loaded",
+        "failure_mode": "context_confusion",
+    },
+    {
+        "name": "kb_search_for_troubleshooting",
+        "input": "How do I reset a user password?",
+        "expected_tools": ["search_knowledge_base"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "kb_searched",
         "failure_mode": "none",
     },
     {
-        "name": "budget_check_large",
-        "input": "I need to buy 5 MacBook Pros (₹10L total)",
-        "expected_tools": ["get_budget_status"],
-        "role": "EMPLOYEE",
-        "expected_outcome": "budget_check_performed",
-        "failure_mode": "budget_hallucination",
+        "name": "case_details_by_number",
+        "input": "Show me case 500ABC",
+        "expected_tools": ["get_case_details"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "case_details_shown",
+        "failure_mode": "none",
     },
     {
-        "name": "manager_approval",
-        "input": "Approve PR-2026-0042",
-        "expected_tools": ["process_approval"],
-        "role": "MANAGER",
-        "expected_outcome": "pr_approved",
+        "name": "draft_reply_for_case",
+        "input": "Help me write a reply to case 500ABC about the refund",
+        "expected_tools": ["draft_case_reply"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "draft_generated",
         "failure_mode": "none",
+    },
+    {
+        "name": "create_case_new_issue",
+        "input": "Open a new case for login issue with jane@acme.com",
+        "expected_tools": ["create_case"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "case_created",
+        "failure_mode": "none",
+    },
+    {
+        "name": "update_case_status",
+        "input": "Mark case 500ABC as resolved",
+        "expected_tools": ["update_case"],
+        "role": "SUPPORT_AGENT",
+        "expected_outcome": "case_updated",
+        "failure_mode": "none",
+    },
+    {
+        "name": "support_ops_read_only",
+        "input": "Search for cases related to billing",
+        "expected_tools": ["search_salesforce_cases"],
+        "must_not_call": ["create_case", "update_case", "escalate_case"],
+        "role": "SUPPORT_OPS",
+        "expected_outcome": "search_only",
+        "failure_mode": "wrong_tool_selection",
     },
 ]
 
@@ -107,11 +105,7 @@ def evaluate_response(
     role: str,
     tool_calls: list[dict[str, Any]] | None = None,
     expected_outcome: str | None = None,
-    budget_status: dict | None = None,
-    pr_id: str | None = None,
-    thread_saved_to_db: bool | None = None,
     ui_response: dict | None = None,
-    cart_contents: list[dict] | None = None,
 ) -> dict[str, Any]:
     """
     Evaluate an agent response against expected behavior.
@@ -123,60 +117,49 @@ def evaluate_response(
     """
     tool_names = [tc["name"] for tc in (tool_calls or [])]
     
-    # Check 1: Wrong tool selection (EMPLOYEE calling process_approval)
-    if role == "EMPLOYEE" and "process_approval" in tool_names:
+    # Check: SUPPORT_AGENT calling escalate_case should be blocked
+    if role == "SUPPORT_AGENT" and "escalate_case" in tool_names:
         return {
             "passed": False,
             "reason": "blocked_role_insufficient",
             "failure_mode": "wrong_tool_selection",
         }
     
-    # Check 2: Wrong tool selection (FINANCE calling submit/approve)
-    if role == "FINANCE" and any(t in tool_names for t in ["submit_for_approval", "process_approval"]):
-        return {
-            "passed": False,
-            "reason": "finance_role_restricted",
-            "failure_mode": "wrong_tool_selection",
-        }
-    
-    # Check 3: Budget hallucination - over budget but still submitted
-    if budget_status and "submit_for_approval" in tool_names:
-        remaining = budget_status.get("remaining", 0)
-        # Assume total request is large (> remaining)
-        if remaining < 100000:  # Arbitrary threshold
+    # Check: SUPPORT_OPS calling create/update/escalate should be blocked
+    if role == "SUPPORT_OPS":
+        blocked = {"create_case", "update_case", "escalate_case"}
+        if any(t in tool_names for t in blocked):
             return {
                 "passed": False,
-                "reason": "budget_exceeded_should_block",
-                "failure_mode": "budget_hallucination",
+                "reason": "support_ops_read_only_restricted",
+                "failure_mode": "wrong_tool_selection",
             }
     
-    # Check 4: PR ID uniqueness
-    if pr_id and expected_outcome == "pr_created":
-        # Would need to compare with previous PRs in real implementation
-        pass
+    # Check: Creating a case without searching first
+    if "create_case" in tool_names and "search_salesforce_cases" not in tool_names:
+        # Only flag if the input suggests existing issue tracking
+        search_keywords = ["issue", "problem", "not working", "broken", "error"]
+        search_keywords += ["bug", "fail", "down", "cannot"]
+        if any(kw in user_input.lower() for kw in search_keywords):
+            return {
+                "passed": False,
+                "reason": "created_case_without_search",
+                "failure_mode": "wrong_tool_selection",
+            }
     
-    # Check 5: HITL thread saved
-    if thread_saved_to_db is False:
-        return {
-            "passed": False,
-            "reason": "thread_not_persisted",
-            "failure_mode": "hitl_thread_lost",
-        }
-    
-    # Check 6: GenUI null price
-    if ui_response and "products" in ui_response:
-        for product in ui_response["products"]:
-            if product.get("price") is None:
-                return {
-                    "passed": False,
-                    "reason": "null_price_in_ui",
-                    "failure_mode": "genui_null_crash",
-                }
-    
-    # Check 7: Context confusion - wrong item
-    if cart_contents and tool_names:
-        # In real impl, would check if added item matches requested item
-        pass
+    # Check: GenUI null fields
+    if ui_response:
+        for key, value in ui_response.items():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        for field_key, field_val in item.items():
+                            if field_val is None and field_key in ("id", "caseNumber", "status"):
+                                return {
+                                    "passed": False,
+                                    "reason": f"null_{field_key}_in_ui",
+                                    "failure_mode": "genui_null_crash",
+                                }
     
     # Default: pass
     return {

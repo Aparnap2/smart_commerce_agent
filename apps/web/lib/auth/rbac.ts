@@ -1,9 +1,8 @@
 /**
  * Role-Based Access Control (RBAC)
  * 
- * Enforces role-based permissions across the application.
- * Supports both B2C and B2B procurement role models,
- * plus SupportPilot support role model (additive).
+ * Enforces role-based permissions across the application
+ * using SupportPilot support role model.
  */
 
 import type { AppRole } from './jwt';
@@ -36,25 +35,6 @@ export function hasAnyRole(userRole: AppRole, ...allowed: AppRole[]): boolean {
   return allowed.includes(userRole);
 }
 
-/**
- * B2C role hierarchy (higher index = more permissions)
- */
-const ROLE_HIERARCHY: AppRole[] = ['SHOPPER', 'MERCHANT', 'SUPPORT', 'ADMIN'];
-
-/**
- * B2B procurement role hierarchy
- */
-const B2B_ROLE_HIERARCHY: AppRole[] = ['EMPLOYEE', 'MANAGER', 'FINANCE', 'ADMIN'];
-
-/**
- * Check if user role meets minimum required role level (B2C hierarchy)
- */
-export function meetsRoleLevel(userRole: AppRole, minimumRole: AppRole): boolean {
-  const userIndex = ROLE_HIERARCHY.indexOf(userRole);
-  const minIndex = ROLE_HIERARCHY.indexOf(minimumRole);
-  return userIndex >= minIndex;
-}
-
 // ─────────────────────────────────────────────────────────
 // ROUTE PROTECTION
 // ─────────────────────────────────────────────────────────
@@ -75,8 +55,6 @@ export const PUBLIC_PATHS = [
  * Routes not listed here require only authentication (any role).
  */
 export const ROUTE_RULES: Record<string, AppRole[]> = {
-  '/manager': ['MANAGER', 'ADMIN'],
-  '/finance': ['FINANCE', 'ADMIN'],
   '/admin': ['ADMIN'],
 };
 
@@ -140,12 +118,11 @@ export function checkRouteAccess(
 }
 
 // ─────────────────────────────────────────────────────────
-// SUPPORT PILOT ROLE SYSTEM (additive — existing logic above untouched)
+// SUPPORT PILOT ROLE SYSTEM
 // ─────────────────────────────────────────────────────────
 
 /**
  * SupportPilot role type.
- * Additive to existing B2C/B2B role models.
  */
 export type SupportRole =
   | 'SUPPORT_AGENT'

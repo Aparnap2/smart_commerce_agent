@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useEffect, useState, useRef, Suspense } from 'react'
+import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { Shell } from '@/components/shell/Shell'
 import { Rail } from '@/components/shell/Rail'
+import { UIContextProvider, useUIContext } from '@/components/support/UIContext'
+import ContextPanel from '@/components/support/ContextPanel'
 import { Send, Headset, AlertCircle, RefreshCw, Sparkles } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
@@ -317,18 +319,13 @@ function renderSupportUIComponent(ui: UIComponent, index: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Support Workspace Page
+// Support Workspace Page — Outer Shell
 // ---------------------------------------------------------------------------
 
 export default function SupportWorkspacePage() {
   const [session, setSession] = useState<SessionInfo | null>(null)
   const [pageState, setPageState] = useState<PageState>('loading')
   const [error, setError] = useState<string | null>(null)
-  const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [uiComponents, setUIComponents] = useState<UIComponent[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchSession()
@@ -348,6 +345,62 @@ export default function SupportWorkspacePage() {
     }
   }
 
+  if (pageState === 'loading') {
+    return <PageSkeleton />
+  }
+
+  if (pageState === 'error') {
+    return <ErrorState message={error ?? 'Unknown error'} onRetry={fetchSession} />
+  }
+
+  return (
+    <Shell rail={<Rail />}>
+      <UIContextProvider>
+        <SupportWorkspace session={session!} />
+      </UIContextProvider>
+    </Shell>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Support Workspace — Chat + Context Panel
+// ---------------------------------------------------------------------------
+
+function SupportWorkspace({ session }: { session: SessionInfo }) {
+  const { addUIPayload, setStreaming, clearContext } = useUIContext()
+  const [input, setInput] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [uiComponents, setUIComponents] = useState<UIComponent[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [lastFailedText, setLastFailedText] = useState<string | null>(null)
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Expose for E2E testing (guarded against SSR)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      ;(window as any).__addUIPayload = addUIPayload
+      ;(window as any).__clearContext = clearContext
+      return () => {
+        delete (window as any).__addUIPayload
+        delete (window as any).__clearContext
+      }
+    }
+  }, [addUIPayload, clearContext])
+
+  /**
+   * Reset the 30-second inactivity timeout for the SSE stream.
+   * If no new data arrives within the window, the connection is aborted.
+   */
+  function resetStreamTimeout(controller: AbortController) {
+    if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+    streamTimeoutRef.current = setTimeout(() => {
+      controller.abort()
+      setStreamError('Response timed out after 30s of inactivity. Please try again.')
+    }, 30_000)
+  }
+
   // ── Send Message ─────────────────────────────────────────────────────
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return
@@ -357,6 +410,12 @@ export default function SupportWorkspacePage() {
     setInput('')
     setIsLoading(true)
     setUIComponents([])
+    setStreamError(null)
+    setLastFailedText(null)
+    setStreaming(true)
+    clearContext()
+
+    const controller = new AbortController()
 
     try {
       const tokenFromCookie = typeof document !== 'undefined'
@@ -367,16 +426,20 @@ export default function SupportWorkspacePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-role': session?.role || 'SUPPORT_AGENT',
+          'x-user-id': session?.userId || 'support-agent',
           Authorization: tokenFromCookie ? `Bearer ${tokenFromCookie}` : '',
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: text }],
           user_id: session?.userId || 'support-agent',
         }),
+        signal: controller.signal,
       })
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        const errText = await response.text().catch(() => '')
+        throw new Error(errText ? `API error: ${response.status} — ${errText}` : `API error: ${response.status}`)
       }
 
       const reader = response.body?.getReader()
@@ -388,9 +451,15 @@ export default function SupportWorkspacePage() {
 
       let buffer = ''
 
+      // Start the inactivity timeout
+      resetStreamTimeout(controller)
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+
+        // Reset inactivity timeout on every data chunk
+        resetStreamTimeout(controller)
 
         buffer += decoder.decode(value, { stream: true })
 
@@ -402,26 +471,71 @@ export default function SupportWorkspacePage() {
           if (line.startsWith('event: ')) {
             eventType = line.slice(7).trim()
           } else if (line.startsWith('data: ')) {
-            const data = line.slice(6)
+            const raw = line.slice(6)
+
+            // Handle empty data — skip
+            if (!raw.trim()) continue
+
             try {
-              if (eventType === 'delta') {
-                const parsed = JSON.parse(data)
-                let content = parsed.content || ''
+              const parsed = JSON.parse(raw)
 
-                // Try to extract __ui__ from JSON content
-                try {
-                  const inner = JSON.parse(content)
-                  if (inner.__ui__) {
-                    setUIComponents(prev => [...prev, {
-                      type: inner.__ui__.name,
-                      props: inner.__ui__.props ?? {},
-                    }])
-                    content = ''
+              // ── messages/partial — AI text chunks (canonical) ──
+              if (eventType === 'messages/partial') {
+                const msgs = Array.isArray(parsed) ? parsed : [parsed]
+                for (const msg of msgs) {
+                  const content = msg.content || ''
+                  if (content) {
+                    setMessages(prev => {
+                      const last = prev[prev.length - 1]
+                      if (last?.role === 'assistant') {
+                        return [...prev.slice(0, -1), { ...last, content: last.content + content }]
+                      }
+                      return [...prev, { role: 'assistant', content }]
+                    })
                   }
-                } catch {
-                  // Not JSON, use as-is
                 }
+                continue
+              }
 
+              // ── custom event — GenUI __ui__ payloads (canonical) ──
+              if (eventType === 'custom') {
+                if (parsed?.type === 'ui' && parsed?.name) {
+                  const name = parsed.name as string
+                  const props = (parsed.props ?? {}) as Record<string, unknown>
+                  setUIComponents(prev => [...prev, { type: name, props }])
+                  addUIPayload(name, props)
+                }
+                continue
+              }
+
+              // ── end event — stream complete (canonical) ──
+              if (eventType === 'end') {
+                setIsLoading(false)
+                setStreaming(false)
+                if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+                continue
+              }
+
+              // ── error event from backend ──
+              if (eventType === 'error') {
+                const errorMsg = parsed?.message || 'An unknown stream error occurred'
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: `Error: ${errorMsg}`,
+                }])
+                setIsLoading(false)
+                setStreaming(false)
+                if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+                continue
+              }
+
+              // ═══════════════════════════════════════════════════════
+              // Backward-compatible event types (legacy chat.py format)
+              // ═══════════════════════════════════════════════════════
+
+              // ── delta — legacy AI text chunks ──
+              if (eventType === 'delta') {
+                const content = parsed.content || ''
                 if (content) {
                   setMessages(prev => {
                     const last = prev[prev.length - 1]
@@ -431,34 +545,55 @@ export default function SupportWorkspacePage() {
                     return [...prev, { role: 'assistant', content }]
                   })
                 }
+                continue
               }
 
+              // ── ui_actions — legacy GenUI payload ──
               if (eventType === 'ui_actions') {
-                const parsed = JSON.parse(data)
                 const actions = parsed.actions || []
                 for (const action of actions) {
                   if (action?.name) {
-                    setUIComponents(prev => [...prev, { type: action.name, props: action.props ?? {} }])
+                    const name = action.name as string
+                    const props = (action.props ?? {}) as Record<string, unknown>
+                    setUIComponents(prev => [...prev, { type: name, props }])
+                    addUIPayload(name, props)
                   }
                 }
+                continue
               }
 
+              // ── complete — legacy stream complete ──
               if (eventType === 'complete') {
                 setIsLoading(false)
+                setStreaming(false)
+                if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+                continue
               }
             } catch {
-              // Skip invalid JSON
+              // JSON parse error — skip malformed data (SSE parse errors
+              // don't crash the page per req #4)
             }
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      // AbortError from user abort or timeout — handled gracefully
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setLastFailedText(text)
+        return
+      }
+
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
+      setStreamError(errorMessage)
+      setLastFailedText(text)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Error: ${err.message}`,
+        content: `Connection lost: ${errorMessage}`,
       }])
     } finally {
       setIsLoading(false)
+      setStreaming(false)
+      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
     }
   }
 
@@ -470,26 +605,25 @@ export default function SupportWorkspacePage() {
     }
   }
 
+  // ── Retry last failed message ────────────────────────────────────────
+  const retryLastMessage = useCallback(() => {
+    if (lastFailedText) {
+      setStreamError(null)
+      sendMessage(lastFailedText)
+    }
+  }, [lastFailedText])
+
   // Scroll to bottom on new content
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, uiComponents])
 
-  // ── Loading state ────────────────────────────────────────────────────
-  if (pageState === 'loading') {
-    return <PageSkeleton />
-  }
-
-  // ── Error state ──────────────────────────────────────────────────────
-  if (pageState === 'error') {
-    return <ErrorState message={error ?? 'Unknown error'} onRetry={fetchSession} />
-  }
-
   // ── Ready state — the full support workspace with GenUI rendering ────
   return (
-    <Shell rail={<Rail />}>
-      <div className="flex flex-col h-screen bg-gray-50">
-        {/* ── Header ─────────────────────────────────────────────────── */}
+    <div className="flex flex-1 min-h-0">
+      {/* ── Center Panel — Chat ─────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
+        {/* ── Header ───────────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -519,7 +653,7 @@ export default function SupportWorkspacePage() {
           </div>
         </div>
 
-        {/* ── Messages and GenUI components area ──────────────────────── */}
+        {/* ── Messages and GenUI components area ────────────────────── */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
           <div className="max-w-3xl mx-auto space-y-5">
             {/* Empty state */}
@@ -550,6 +684,23 @@ export default function SupportWorkspacePage() {
             {/* GenUI components */}
             {uiComponents.map((ui, i) => renderSupportUIComponent(ui, i))}
 
+            {/* Inline error with retry (connection failure or timeout) */}
+            {streamError && lastFailedText && !isLoading && (
+              <div className="flex justify-center">
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 max-w-md">
+                  <AlertCircle size={16} className="shrink-0 text-red-400" />
+                  <span className="flex-1">{streamError}</span>
+                  <button
+                    onClick={retryLastMessage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-100 hover:bg-red-200 active:bg-red-300 text-red-700 rounded-lg transition-colors shrink-0"
+                  >
+                    <RefreshCw size={13} />
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Loading indicator — animated pulse skeleton */}
             {isLoading && (
               <div className="flex justify-start">
@@ -575,7 +726,7 @@ export default function SupportWorkspacePage() {
           </div>
         </div>
 
-        {/* ── Input area ──────────────────────────────────────────────── */}
+        {/* ── Input area ────────────────────────────────────────────── */}
         <div className="bg-white border-t border-gray-200 px-4 sm:px-6 py-3 shrink-0">
           <div className="flex gap-3 items-end max-w-3xl mx-auto">
             <textarea
@@ -599,6 +750,9 @@ export default function SupportWorkspacePage() {
           </div>
         </div>
       </div>
-    </Shell>
+
+      {/* ── Right Panel — Context ──────────────────────────────────────── */}
+      <ContextPanel />
+    </div>
   )
 }
