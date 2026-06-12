@@ -43,12 +43,19 @@ class TestGetToolsForRole:
         assert "raise_dispute" in tool_names
 
     def test_admin_gets_all_tools(self):
-        """ADMIN role should get all tools."""
+        """ADMIN role should get ALL procurement tools + ALL support tools."""
         tools = get_tools_for_role("ADMIN")
         tool_names = [t.name for t in tools]
         
+        # All procurement tools
         assert "process_approval" in tool_names
-        assert len(tool_names) == len(ALL_TOOLS)
+        assert "search_catalog" in tool_names
+        assert "get_budget_status" in tool_names
+        # All support tools
+        assert "search_salesforce_cases" in tool_names
+        assert "escalate_case" in tool_names
+        # Total: len(ALL_TOOLS) procurement + 9 support = 19
+        assert len(tool_names) == len(ALL_TOOLS) + 9
 
     def test_finance_gets_restricted_tools(self):
         """FINANCE role should NOT have submit_for_approval or process_approval."""

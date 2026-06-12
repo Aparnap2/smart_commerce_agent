@@ -1,0 +1,46 @@
+{
+  "id": "supportpilot-phase1-03",
+  "seq": "03",
+  "title": "Support Role Mapping — extend RBAC, JWT, and middleware for support routes",
+  "status": "completed",
+"agent_id": "coder-agent",
+"started_at": "2026-05-28T00:00:00Z",
+"completed_at": "2026-05-28T00:00:00Z",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/web/lib/auth/rbac.ts",
+    "apps/web/lib/auth/jwt.ts",
+    "apps/web/middleware.ts",
+    "apps/web/lib/auth/index.ts"
+  ],
+  "acceptance_criteria": [
+    "TDD: test file written BEFORE implementation",
+    "rbac.ts: SupportRole type added: 'SUPPORT_AGENT' | 'TEAM_LEAD' | 'SUPPORT_OPS' | 'ADMIN'",
+    "rbac.ts: Role hierarchy: SUPPORT_AGENT < TEAM_LEAD < SUPPORT_OPS < ADMIN",
+    "rbac.ts: Old B2B roles preserved (EMPLOYEE, MANAGER, FINANCE, ADMIN) — backward compatible",
+    "rbac.ts: SUPPORT_ROUTES map with correct access per route: /support (4 roles), /team-lead (TEAM_LEAD, ADMIN), /support-ops (SUPPORT_OPS, ADMIN), /admin (ADMIN)",
+    "rbac.ts: checkSupportRouteAccess(role, path) function exported — parallel to existing checkRouteAccess",
+    "rbac.ts: New role constants and route rules exported",
+    "jwt.ts: TokenPayload extended with optional orgId?: string and sfOrgMapping?: string",
+    "jwt.ts: No changes to signToken or verifyToken logic",
+    "middleware.ts: /support/*, /team-lead/*, /support-ops/* added to route matcher",
+    "middleware.ts: Route check tries checkSupportRouteAccess first, falls back to checkRouteAccess for procurement routes",
+    "middleware.ts: x-sf-org header injected alongside x-role, x-user-id, x-department-id",
+    "Tests: SupportRole hierarchy, route access per role, backward compatibility with old roles, checkSupportRouteAccess edge cases",
+    "All vitest tests pass — zero existing functionality changes"
+  ],
+  "deliverables": [
+    "apps/web/lib/auth/rbac.ts (modified)",
+    "apps/web/lib/auth/jwt.ts (modified)",
+    "apps/web/middleware.ts (modified)",
+    "apps/web/__tests__/lib/auth/rbac-support.test.ts"
+  ],
+  "bounded_context": "support-infrastructure",
+  "module": "@web/auth"
+}

@@ -1,0 +1,39 @@
+{
+  "id": "supportpilot-phase2-03",
+  "seq": "03",
+  "title": "Graph integration — register SUPPORT_TOOLS, system prompt, role-based routing",
+  "status": "pending",
+  "depends_on": ["01", "02"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/src/dependencies.py",
+    "apps/agent-core/src/graph.py",
+    "apps/agent-core/src/tools.py",
+    "apps/agent-core/src/support/tools.py",
+    "apps/agent-core/src/support/__init__.py"
+  ],
+  "acceptance_criteria": [
+    "apps/agent-core/src/dependencies.py updated: lifespan initializes MockSalesforceClient as singleton accessible via get_salesforce_client()",
+    "apps/agent-core/src/graph.py updated: imports SUPPORT_TOOLS from apps/agent-core/src/support/__init__.py",
+    "ToolNode in graph.py uses combined tool list (ALL_TOOLS + SUPPORT_TOOLS)",
+    "SupportPilot section added to SYSTEM_PROMPT_STATIC with descriptions for all 9 support tools",
+    "System prompt matches existing ProcureAI tool routing documentation style",
+    "apps/agent-core/src/tools.py get_tools_for_role() updated: SUPPORT_AGENT, TEAM_LEAD, SUPPORT_OPS roles return support tools",
+    "Role mapping: SUPPORT_AGENT gets read tools (1-5), TEAM_LEAD gets all 9, SUPPORT_OPS gets read + mutation (1-8), ADMIN gets all",
+    "Support tools are only available when session user has a support role — strict domain separation from procurement tools",
+    "Existing procurement tool behavior is NOT affected by changes",
+    "All existing tests still pass after integration changes"
+  ],
+  "deliverables": [
+    "apps/agent-core/src/dependencies.py (modified)",
+    "apps/agent-core/src/graph.py (modified)",
+    "apps/agent-core/src/tools.py (modified)"
+  ],
+  "bounded_context": "customer-support",
+  "module": "apps/agent-core/src"
+}

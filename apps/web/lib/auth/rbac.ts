@@ -2,7 +2,8 @@
  * Role-Based Access Control (RBAC)
  * 
  * Enforces role-based permissions across the application.
- * Supports both B2C and B2B procurement role models.
+ * Supports both B2C and B2B procurement role models,
+ * plus SupportPilot support role model (additive).
  */
 
 import type { AppRole } from './jwt';
@@ -136,4 +137,68 @@ export function checkRouteAccess(
 
   // ── All other authenticated routes are allowed ────────
   return { allowed: true, redirectTo: '', authenticated: true };
+}
+
+// ─────────────────────────────────────────────────────────
+// SUPPORT PILOT ROLE SYSTEM (additive — existing logic above untouched)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * SupportPilot role type.
+ * Additive to existing B2C/B2B role models.
+ */
+export type SupportRole =
+  | 'SUPPORT_AGENT'
+  | 'TEAM_LEAD'
+  | 'SUPPORT_OPS'
+  | 'ADMIN';
+
+/**
+ * SupportPilot role hierarchy (higher number = more privileges).
+ */
+export const SUPPORT_ROLE_HIERARCHY: Record<SupportRole, number> = {
+  SUPPORT_AGENT: 1,
+  TEAM_LEAD: 2,
+  SUPPORT_OPS: 3,
+  ADMIN: 4,
+};
+
+/**
+ * SupportPilot route protection rules.
+ * Each entry maps a route prefix to the list of support roles
+ * allowed to access it. ADMIN is included in every route as the
+ * top-level role (hierarchy override).
+ */
+export const SUPPORT_ROUTES: Record<string, SupportRole[]> = {
+  '/support': ['SUPPORT_AGENT', 'TEAM_LEAD', 'SUPPORT_OPS', 'ADMIN'],
+  '/team-lead': ['TEAM_LEAD', 'ADMIN'],
+  '/support-ops': ['SUPPORT_OPS', 'ADMIN'],
+  '/admin': ['ADMIN'],
+};
+
+/**
+ * Check whether a support role can access a given path.
+ *
+ * Uses SUPPORT_ROUTES to determine explicit access, with ADMIN
+ * granted hierarchy-based access to all support routes.
+ *
+ * @param role - The user's support role (string — cast to SupportRole)
+ * @param path - The URL pathname being accessed
+ * @returns boolean — true if access is allowed
+ */
+export function checkSupportRouteAccess(role: string, path: string): boolean {
+  for (const [route, allowedRoles] of Object.entries(SUPPORT_ROUTES)) {
+    if (path === route || path.startsWith(route + '/')) {
+      // Direct role match
+      if (allowedRoles.includes(role as SupportRole)) {
+        return true;
+      }
+      // Hierarchy override: ADMIN can access any support route
+      if (role === 'ADMIN') {
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
 }

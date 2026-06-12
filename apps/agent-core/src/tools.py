@@ -11,6 +11,7 @@ from loguru import logger
 from .db import get_pool
 from .dependencies import get_redis
 from .notifications import publish_approval_event, send_slack_notification
+from src.support import SUPPORT_TOOLS
 import re
 
 
@@ -1179,6 +1180,18 @@ async def vendor_sourcing_request(
     return json.dumps(result)
 
 
+# ─────────────────────────────────────────────────────────
+# SupportPilot — Salesforce support role-tool mapping
+# ─────────────────────────────────────────────────────────
+
+SUPPORT_ROLE_TOOLS = {
+    "SUPPORT_AGENT": SUPPORT_TOOLS[:-1],  # All except escalate (read+create+update)
+    "TEAM_LEAD": SUPPORT_TOOLS,           # All 9 (including escalate)
+    "SUPPORT_OPS": SUPPORT_TOOLS[:5],     # Read-only (case search, detail, context, kb, similar)
+    "ADMIN": SUPPORT_TOOLS,               # All 9
+}
+
+
 def get_tools_for_role(role: str) -> list:
     """
     Get role-specific tool list.
@@ -1187,7 +1200,7 @@ def get_tools_for_role(role: str) -> list:
     This reduces LLM confusion, tightens security, and makes Langfuse traces cleaner.
     
     Args:
-        role: User role (EMPLOYEE, MANAGER, ADMIN, FINANCE)
+        role: User role (EMPLOYEE, MANAGER, ADMIN, FINANCE, SUPPORT_AGENT, TEAM_LEAD, SUPPORT_OPS)
         
     Returns:
         List of tools available for the role
@@ -1233,6 +1246,15 @@ def get_tools_for_role(role: str) -> list:
         "FINANCE": finance_tools,
     }
     
+    # Support role tool augmentation (after existing logic)
+    support_roles = {"SUPPORT_AGENT", "TEAM_LEAD", "SUPPORT_OPS", "ADMIN"}
+    if role in support_roles:
+        support_tools = SUPPORT_ROLE_TOOLS.get(role, [])
+        # ADMIN gets BOTH procurement tools AND support tools
+        if role == "ADMIN":
+            return admin_tools + support_tools
+        return support_tools
+    
     return role_map.get(role, [])
 
 
@@ -1247,4 +1269,6 @@ ALL_TOOLS = [
     compare_market_price,
     vendor_sourcing_request,
     get_pricing_audit_results,
+    # SupportPilot tools — required by ToolNode so it can execute support tool calls
+    *SUPPORT_TOOLS,
 ]

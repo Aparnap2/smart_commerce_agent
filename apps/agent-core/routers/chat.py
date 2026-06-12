@@ -25,6 +25,7 @@ class ChatMessage(BaseModel):
 class StreamRequest(BaseModel):
     messages: List[ChatMessage]
     user_id: str
+    user_role: Optional[str] = None
     thread_id: Optional[str] = None
     configurable: Optional[dict] = None
 
@@ -36,11 +37,10 @@ async def chat(request: Request, body: StreamRequest):
     
     Auth: JWT required (validated by middleware)
     Returns: text/event-stream with:
-    - delta: text chunks
-    - tool_call: tool invocations  
-    - ui_actions: GenUI components
+    - messages/partial: AI text chunks (data: [{content, type}])
+    - custom: GenUI __ui__ payloads (data: {type: "ui", name, props})
     - thread_id: conversation ID
-    - complete: end of stream
+    - end: stream complete
     - error: error message
     """
     # Check auth header (allow test mode without auth)
@@ -61,11 +61,17 @@ async def chat(request: Request, body: StreamRequest):
             elif msg.role == "assistant":
                 langchain_messages.append(AIMessage(content=msg.content))
         
-        # Build initial state
+        # Build initial state — user_role can come from body.user_role
+        # or configurable.role (in order of precedence)
+        effective_role = (
+            body.user_role
+            or (body.configurable.get("role") if body.configurable else None)
+            or "EMPLOYEE"
+        )
         initial_state = {
             "messages": langchain_messages,
             "user_id": body.user_id,
-            "user_role": body.configurable.get("role", "EMPLOYEE") if body.configurable else "EMPLOYEE",
+            "user_role": effective_role,
             "step_count": 0,
         }
         
@@ -77,19 +83,82 @@ async def chat(request: Request, body: StreamRequest):
                     if "messages" in event:
                         last_msg = event["messages"][-1]
                         if hasattr(last_msg, "content") and last_msg.content:
-                            yield {"event": "delta", "data": json.dumps({"content": last_msg.content})}
-                    
-                    # Check for tool calls (would be in last message's tool_calls)
-                    # Check for UI actions in last_tool_result
+                            raw_content = last_msg.content
+                            ui_payload = None
+                            display_content = None
+
+                            # Parse structured JSON content that embeds
+                            # __ui__ alongside the text content.
+                            #
+                            # This handles TWO paths:
+                            #   1. Real LLM: ToolNode returns ToolMessage whose
+                            #      content is JSON with __ui__ + content fields
+                            #   2. MockLLM/any provider: AIMessage whose content
+                            #      is JSON wrapping __ui__ + native text
+                            try:
+                                parsed = json.loads(raw_content)
+                                if isinstance(parsed, dict):
+                                    # Pop __ui__ so it doesn't leak to text
+                                    ui_payload = parsed.pop("__ui__", None)
+                                    # Use clean content field if available
+                                    display_content = parsed.get("content", "")
+                            except (json.JSONDecodeError, TypeError):
+                                # Not JSON — use as plain text
+                                pass
+
+                            # Fall back to raw content if no cleaner version
+                            if display_content is None:
+                                display_content = raw_content
+
+                            # Canonical SSE format (src/sse.py spec)
+                            if display_content:
+                                yield {
+                                    "event": "messages/partial",
+                                    "data": json.dumps(
+                                        [{"content": display_content, "type": "ai"}]
+                                    ),
+                                }
+                                # Backward-compatible delta (legacy chat pages)
+                                yield {
+                                    "event": "delta",
+                                    "data": json.dumps({"content": display_content}),
+                                }
+
+                            # Emit UI payload if found in message content
+                            if ui_payload:
+                                yield {
+                                    "event": "custom",
+                                    "data": json.dumps({"type": "ui", **ui_payload}),
+                                }
+                                # Backward-compatible ui_actions
+                                yield {
+                                    "event": "ui_actions",
+                                    "data": json.dumps({"actions": [ui_payload]}),
+                                }
+
+                    # Check for UI actions in last_tool_result (backup path)
                     if "last_tool_result" in event and event["last_tool_result"]:
                         result = event["last_tool_result"]
                         if "__ui__" in result:
-                            yield {"event": "ui_actions", "data": json.dumps({"actions": [result["__ui__"]]})}
+                            ui = result["__ui__"]
+                            # Canonical SSE format
+                            yield {
+                                "event": "custom",
+                                "data": json.dumps({"type": "ui", **ui}),
+                            }
+                            # Backward-compatible ui_actions (legacy chat pages)
+                            yield {
+                                "event": "ui_actions",
+                                "data": json.dumps({"actions": [ui]}),
+                            }
                     
                     # Check for pending PR (approval flow)
                     if "pending_pr_id" in event and event["pending_pr_id"]:
                         yield {"event": "thread_id", "data": json.dumps({"threadId": event.get("pending_pr_number", "")})}
                 
+                # Canonical end event
+                yield {"event": "end", "data": json.dumps({})}
+                # Backward-compatible complete event
                 yield {"event": "complete", "data": json.dumps({})}
                 
             except Exception as e:

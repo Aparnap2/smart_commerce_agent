@@ -26,6 +26,7 @@ _db_pool: asyncpg.Pool | None = None
 _redis: aioredis.Redis | None = None
 _llm: "ChatOpenAI | MockLLM | None" = None
 _langfuse: Langfuse | None = None
+_salesforce_client: "MockSalesforceClient | None" = None
 
 
 class MockLLM:
@@ -117,10 +118,46 @@ class MockLLM:
         return self
 
 
+def init_salesforce_client(
+    mode: str | None = None,
+    api_key: str | None = None,
+    instance_url: str | None = None,
+):
+    """Initialize the global Salesforce client singleton.
+
+    Args:
+        mode: 'mock' (default) or 'live'. Falls back to SALESFORCE_MODE env var.
+        api_key: Optional Salesforce API key. Falls back to SALESFORCE_API_KEY env var.
+        instance_url: Optional Salesforce instance URL. Falls back to SALESFORCE_INSTANCE_URL env var.
+    """
+    global _salesforce_client
+    from src.salesforce import MockSalesforceClient
+
+    _salesforce_client = MockSalesforceClient(
+        mode=mode or os.environ.get("SALESFORCE_MODE", "mock"),
+        api_key=api_key or os.environ.get("SALESFORCE_API_KEY"),
+        instance_url=instance_url or os.environ.get("SALESFORCE_INSTANCE_URL"),
+    )
+    print(f"✅ Salesforce client initialized (mode={_salesforce_client.mode})")
+    return _salesforce_client
+
+
+def get_salesforce_client():
+    """Get the global Salesforce client singleton."""
+    return _salesforce_client
+
+
+def shutdown_salesforce_client():
+    """Clean up Salesforce client on shutdown."""
+    global _salesforce_client
+    _salesforce_client = None
+    print("✅ Salesforce client shutdown")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize all clients ONCE at startup."""
-    global _db_pool, _redis, _llm
+    global _db_pool, _redis, _llm, _salesforce_client
 
     mock_llm = os.environ.get("MOCK_LLM", "false").lower() == "true"
     print(f"🔧 MOCK_LLM={mock_llm}")
@@ -167,6 +204,10 @@ async def lifespan(app: FastAPI):
         _langfuse = Langfuse()
         print("✅ Langfuse initialized")
 
+    # Initialize Salesforce client (always, even in mock mode)
+    init_salesforce_client()
+    print("✅ Salesforce client initialized")
+
     yield  # ← app runs here
 
     # Clean shutdown
@@ -176,6 +217,7 @@ async def lifespan(app: FastAPI):
     if _redis:
         await _redis.aclose()
         print("✅ Redis closed")
+    shutdown_salesforce_client()
 
 
 def get_pool() -> asyncpg.Pool:

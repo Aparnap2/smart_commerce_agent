@@ -1,0 +1,36 @@
+{
+  "id": "supportpilot-phase2-05",
+  "seq": "05",
+  "title": "Integration test — support tools against real OpenRouter LLM",
+  "status": "pending",
+  "depends_on": ["01", "02", "03", "04"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/tests/conftest.py",
+    "apps/agent-core/tests/test_graph.py",
+    "apps/agent-core/src/support/tools.py",
+    "apps/agent-core/src/graph.py"
+  ],
+  "acceptance_criteria": [
+    "apps/agent-core/tests/test_support_integration.py exists",
+    "File is gated behind INTEGRATION_TEST=true environment variable: @pytest.mark.skipif('INTEGRATION_TEST' not in os.environ)",
+    "Tests support tool selection and response correctness against real OpenRouter LLM",
+    "At least 3 integration tests: read tool path, mutation tool path, and escalation HITL path",
+    "Tests verify prompt → tool selection → response correctness in the compiled graph",
+    "Tests use the same MockSalesforceClient (no real Salesforce calls)",
+    "Tests verify GenUI __ui__ payloads are correctly stripped before LLM context re-entry (Pattern 7 check)",
+    "Test for role-based routing: SUPPORT_AGENT prompt should pick read tools, TEAM_LEAD can escalate",
+    "All integration tests pass when run with INTEGRATION_TEST=true",
+    "Tests are skipped by default (no impact on CI unit test runs)"
+  ],
+  "deliverables": [
+    "apps/agent-core/tests/test_support_integration.py"
+  ],
+  "bounded_context": "customer-support",
+  "module": "apps/agent-core/tests"
+}

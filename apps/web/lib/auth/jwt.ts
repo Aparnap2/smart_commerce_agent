@@ -26,6 +26,10 @@ export interface TokenPayload {
   email: string;
   role: AppRole;
   departmentId?: string | null;
+  /** SupportPilot org identifier for multi-tenant routing */
+  orgId?: string;
+  /** Salesforce org mapping for cross-org data access */
+  sfOrgMapping?: string;
 }
 
 /**

@@ -15,6 +15,9 @@ os.environ.setdefault("COMMERCE_API_URL", "http://localhost:3001")
 os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:11434/v1")  # stub
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("OPENAI_MODEL", "gpt-oss-120b")
+# LLM_PROVIDER: read from env (cohere, openrouter, etc.) — no mock.
+# Tests use the real LLM provider. Set in .env or export before running.
+# If unset, defaults to "cohere" via create_llm() in src/llm_config.py.
 
 # Required for pytest-asyncio
 pytest_plugins = ["pytest_asyncio"]
@@ -29,34 +32,23 @@ def event_loop():
     loop.close()
 
 
-_test_pool = None
+_test_conn = None
 
 
 @pytest.fixture(scope="function")
 async def test_db_pool():
-    """Function-scoped pool with transaction rollback. Each test gets a clean DB state.
-    The pool is initialized once but used within each test's own event loop.
+    """Each test gets a fresh direct connection with a transaction that rolls back.
+    No global pool — avoids cross-event-loop contamination.
     """
-    global _test_pool
-    if _test_pool is None:
-        DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://supabase_admin:postgres@localhost:5433/postgres")
-        _test_pool = await asyncpg.create_pool(
-            DATABASE_URL,
-            min_size=2,
-            max_size=10,
-            command_timeout=60,
-        )
-        from src import dependencies
-        dependencies._db_pool = _test_pool
-
-    conn = await _test_pool.acquire()
+    DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://supabase_admin:postgres@localhost:5433/postgres")
+    conn = await asyncpg.connect(DATABASE_URL, command_timeout=60)
     tx = conn.transaction()
     await tx.start()
     try:
         yield conn
     finally:
         await tx.rollback()
-        await _test_pool.release(conn)
+        await conn.close()
 
 
 @pytest.fixture
@@ -70,3 +62,36 @@ def tool_config():
             "thread_id": "test-thread",
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def real_llm():
+    """Initialize the real LLM provider (from env) for ALL tests.
+
+    Reads LLM_PROVIDER and provider-specific env vars (COHERE_*, etc.)
+    from the environment. Falls back to create_llm() default (cohere).
+
+    Tests that specifically need MockLLM behavior should override this
+    fixture or set dependencies._llm directly.
+    """
+    from src import dependencies
+    from src.llm_config import create_llm
+
+    # Force creation — don't reuse stale singleton
+    dependencies._llm = create_llm()
+    yield
+    dependencies._llm = None
+
+
+@pytest.fixture(autouse=True)
+def salesforce_client():
+    """Initialize the Salesforce client singleton before each test function.
+    
+    Support tools now use the DI singleton (get_salesforce_client()) instead of
+    creating a fresh MockSalesforceClient. This fixture ensures the singleton
+    is available for tests that exercise support tools.
+    """
+    from src.dependencies import init_salesforce_client, shutdown_salesforce_client
+    init_salesforce_client()
+    yield
+    shutdown_salesforce_client()

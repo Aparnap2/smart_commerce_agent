@@ -4,22 +4,29 @@
  * Enforces:
  *  1. Authentication — redirects to /auth/login if no valid JWT cookie
  *  2. Role-based access — route rules per ROUTE_RULES in lib/auth/rbac
- *  3. Header injection — x-role, x-user-id, x-department-id on every
- *     downstream request for API routes to validate
+ *  3. SupportPilot role-based access — additive check via checkSupportRouteAccess
+ *  4. Header injection — x-role, x-user-id, x-department-id, x-org-id, x-sf-org
+ *     on every downstream request for API routes to validate
  *
- * Route rules:
+ * Procurement route rules:
  *  /chat       → any authenticated role
  *  /manager    → MANAGER or ADMIN
  *  /finance    → FINANCE or ADMIN
  *  /admin      → ADMIN
  *  /auth/*     → public (no auth required)
  *  /           → redirects to /chat (auth'd) or /auth/login (not auth'd)
+ *
+ * SupportPilot route rules (additive):
+ *  /support    → SUPPORT_AGENT, TEAM_LEAD, SUPPORT_OPS, ADMIN
+ *  /team-lead  → TEAM_LEAD, ADMIN
+ *  /support-ops→ SUPPORT_OPS, ADMIN
+ *  /admin      → ADMIN
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
-import { checkRouteAccess } from '@/lib/auth/rbac';
+import { checkRouteAccess, checkSupportRouteAccess, SUPPORT_ROUTES } from '@/lib/auth/rbac';
 import type { AppRole } from '@/lib/auth/jwt';
 
 /**
@@ -42,7 +49,7 @@ const PUBLIC_PATH_PREFIXES = [
  */
 async function parseSession(
   req: NextRequest,
-): Promise<{ role: AppRole; userId: string; departmentId?: string | null } | null> {
+): Promise<{ role: AppRole; userId: string; departmentId?: string | null; orgId?: string; sfOrgMapping?: string } | null> {
   const cookieHeader = req.headers.get('cookie') || '';
   const tokenMatch = cookieHeader.match(/(?:^|;\s*)token=([^;]+)/);
   if (!tokenMatch) return null;
@@ -53,6 +60,8 @@ async function parseSession(
       role: payload.role as AppRole,
       userId: payload.userId,
       departmentId: payload.departmentId,
+      orgId: payload.orgId,
+      sfOrgMapping: payload.sfOrgMapping,
     };
   } catch {
     // Invalid or expired token — treat as unauthenticated
@@ -72,7 +81,7 @@ export async function middleware(req: NextRequest) {
   // ── Parse session ──────────────────────────────────────────────────
   const session = await parseSession(req);
 
-  // ── Check route access ─────────────────────────────────────────────
+  // ── Check route access (procurement rules) ─────────────────────────
   const { allowed, redirectTo } = checkRouteAccess(path, session?.role ?? null);
 
   if (!allowed) {
@@ -88,6 +97,21 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(redirectTo, req.url));
   }
 
+  // ── Support route check (additive — falls back to procurement check) ─
+  const supportRouteMatch = Object.keys(SUPPORT_ROUTES).some(route =>
+    path === route || path.startsWith(route + '/'),
+  );
+
+  if (supportRouteMatch) {
+    const hasAccess = checkSupportRouteAccess(session?.role ?? '', path);
+    if (!hasAccess) {
+      console.log(
+        `[Auth] Support route blocked ${path} for ${session?.userId ?? 'anonymous'} (role: ${session?.role ?? 'none'})`,
+      );
+      return NextResponse.redirect(new URL('/chat', req.url));
+    }
+  }
+
   // ── Forward session headers to downstream route handlers ───────────
   // This allows API routes and pages to read x-role, x-user-id, etc.
   // without re-parsing the JWT cookie.
@@ -98,6 +122,12 @@ export async function middleware(req: NextRequest) {
     response.headers.set('x-user-id', session.userId);
     if (session.departmentId) {
       response.headers.set('x-department-id', session.departmentId);
+    }
+    if (session.orgId) {
+      response.headers.set('x-org-id', session.orgId);
+    }
+    if (session.sfOrgMapping) {
+      response.headers.set('x-sf-org', session.sfOrgMapping);
     }
   }
 
@@ -118,5 +148,8 @@ export const config = {
     '/finance/:path*',
     '/admin/:path*',
     '/api/agent/:path*',
+    '/support/:path*',
+    '/team-lead/:path*',
+    '/support-ops/:path*',
   ],
 };

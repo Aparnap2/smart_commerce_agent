@@ -1,0 +1,36 @@
+{
+  "id": "supportpilot-phase2-02",
+  "seq": "02",
+  "title": "TDD test file for all 9 support tools",
+  "status": "pending",
+  "depends_on": ["01"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/tests/conftest.py",
+    "apps/agent-core/src/salesforce/client.py",
+    "apps/agent-core/src/support/tools.py",
+    "apps/agent-core/tests/test_tools_tdd.py"
+  ],
+  "acceptance_criteria": [
+    "apps/agent-core/tests/test_support_tools.py exists with tests for all 9 tools",
+    "Each tool has at least one positive test: creates MockSalesforceClient, calls the tool, verifies response structure",
+    "Each tool test verifies __ui__ payload content matches the GenUI contract (name + props shape)",
+    "Test error handling: bad input, missing case/account, invalid action, etc.",
+    "Test role-based access: SUPPORT_AGENT can search/knowledge-base, only TEAM_LEAD can escalate",
+    "Tests use the test_db_pool and tool_config fixtures from conftest.py",
+    "Tests are async and use pytest-asyncio",
+    "All tests pass: `python -m pytest apps/agent-core/tests/test_support_tools.py -v`",
+    "Test coverage includes edge cases (empty results, missing fields, invalid priorities)",
+    "Tests do NOT require real LLM or Salesforce — use MockSalesforceClient exclusively"
+  ],
+  "deliverables": [
+    "apps/agent-core/tests/test_support_tools.py"
+  ],
+  "bounded_context": "customer-support",
+  "module": "apps/agent-core/tests"
+}

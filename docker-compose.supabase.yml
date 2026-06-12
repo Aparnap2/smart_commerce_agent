@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  rest:
+    container_name: supabase-rest
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:postgres@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: supersecretkey123
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+
+  db:
+    container_name: supabase-db
+    image: supabase/postgres:15.8.1.085
+    restart: unless-stopped
+    volumes:
+      - ./volumes/db/data:/var/lib/postgresql/data:Z
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      JWT_SECRET: supersecretkey123
+      JWT_EXP: 3600
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5433:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 1024M
+
+  auth:
+    container_name: supabase-auth
+    image: supabase/gotrue:v2.186.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:postgres@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_JWT_SECRET: supersecretkey123
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+    ports:
+      - "9999:9999"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+
+  functions:
+    container_name: supabase-edge-functions
+    image: supabase/edge-runtime:v1.71.2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: supersecretkey123
+      SUPABASE_DB_URL: postgresql://postgres:postgres@db:5432/postgres
+    volumes:
+      - ./volumes/functions:/home/deno/functions:Z
+    command: ["start", "--main-service", "/home/deno/functions/main"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+
+  storage:
+    container_name: supabase-storage
+    image: supabase/storage-api:v1.48.26
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ANON_KEY: anonkeytest
+      SERVICE_KEY: servicerolekeytest
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: supersecretkey123
+      DATABASE_URL: postgres://supabase_storage_admin:postgres@db:5432/postgres
+      STORAGE_PUBLIC_URL: http://localhost:5000
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: testbucket
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: test-tenant
+      REGION: local
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+    volumes:
+      - ./volumes/storage:/var/lib/storage:z
+    ports:
+      - "5000:5000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M

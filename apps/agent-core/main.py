@@ -107,8 +107,8 @@ async def stream_chat(body: StreamRequest):
 
 @app.get("/health")
 async def health():
-    mock_llm = os.environ.get("MOCK_LLM", "false").lower() == "true"
-    if mock_llm:
+    is_mock = os.environ.get("LLM_PROVIDER", "cohere").lower().strip() == "mock"
+    if is_mock:
         return {"status": "ok", "service": "agent-core", "version": "1.0.0", "postgres": False, "mock": True}
     pool = await get_pool()
     async with pool.acquire() as conn:
