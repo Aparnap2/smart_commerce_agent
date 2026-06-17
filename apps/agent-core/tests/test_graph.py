@@ -39,8 +39,10 @@ class TestSystemPrompt:
         from src.llm_config import MockLLM
         from src import dependencies
         from src.graph import graph
+        import src.graph as graph_module  # must reset module-level llm cache
 
         dependencies._llm = MockLLM()
+        graph_module.llm = None  # force get_llm() to fetch from dependencies
 
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
         r = aioredis.from_url(redis_url, decode_responses=True)

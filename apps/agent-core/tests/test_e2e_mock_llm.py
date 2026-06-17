@@ -293,6 +293,12 @@ class TestE2EFullGraph:
         routes through the agent node, and ends cleanly without crashing.
         """
         from src.graph import graph
+        import src.graph as graph_module
+        from src.llm_config import MockLLM
+        from src import dependencies
+        # Override the real_llm autouse fixture with MockLLM
+        dependencies._llm = MockLLM()
+        graph_module.llm = None  # reset module-level cache to pick up MockLLM
 
         result = await graph.ainvoke({
             "messages": [HumanMessage(content="Find open cases for Acme Corp")],
@@ -327,29 +333,28 @@ class TestE2ERoleFiltering:
         """
         from src.tools import get_tools_for_role
 
-        # ── SUPPORT_AGENT: 8 tools, no escalate ────────────────────
+        # ── SUPPORT_AGENT: all 10 tools (including escalate + send) ─
         agent_tools = get_tools_for_role("SUPPORT_AGENT")
         agent_names = [t.name for t in agent_tools]
-        assert "escalate_case" not in agent_names, \
-            "SUPPORT_AGENT must not have escalate_case"
-        assert len(agent_names) == 8, \
-            f"SUPPORT_AGENT should have 8 tools, got {len(agent_names)}: {agent_names}"
-        # Verify all expected tools are present
-        for expected in [
+        SUPPORT_AGENT_ALL = [
             "search_salesforce_cases", "get_case_details", "get_customer_context",
             "search_knowledge_base", "search_similar_tickets", "draft_case_reply",
-            "create_case", "update_case",
-        ]:
+            "create_case", "update_case", "escalate_case", "send_case_reply",
+        ]
+        assert len(agent_names) == 10, \
+            f"SUPPORT_AGENT should have 10 tools, got {len(agent_names)}: {agent_names}"
+        for expected in SUPPORT_AGENT_ALL:
             assert expected in agent_names, \
                 f"SUPPORT_AGENT missing tool: {expected}"
 
-        # ── TEAM_LEAD: 9 tools, includes escalate ──────────────────
+        # ── TEAM_LEAD: all 10 tools, includes escalate + send ──────
         lead_tools = get_tools_for_role("TEAM_LEAD")
         lead_names = [t.name for t in lead_tools]
-        assert "escalate_case" in lead_names, \
-            "TEAM_LEAD must have escalate_case"
-        assert len(lead_names) == 9, \
-            f"TEAM_LEAD should have 9 tools, got {len(lead_names)}: {lead_names}"
+        assert len(lead_names) == 10, \
+            f"TEAM_LEAD should have 10 tools, got {len(lead_names)}: {lead_names}"
+        for expected in SUPPORT_AGENT_ALL:
+            assert expected in lead_names, \
+                f"TEAM_LEAD missing tool: {expected}"
 
         # ── SUPPORT_OPS: 5 read-only tools ─────────────────────────
         ops_tools = get_tools_for_role("SUPPORT_OPS")
