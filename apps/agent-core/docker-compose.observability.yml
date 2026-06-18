@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports: ["3001:3000"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-db:5432/langfuse
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-secret}
+      NEXTAUTH_URL: http://localhost:3001
+    depends_on:
+      - langfuse-db
+    volumes:
+      - langfuse_data:/app/data
+
+  langfuse-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  langfuse_data:
+  langfuse_db_data:
+  prometheus_data:
+  grafana_data:
