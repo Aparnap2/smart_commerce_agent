@@ -341,6 +341,26 @@ def create_llm(temperature: float = 0) -> "ChatOpenAI | MockLLM | FallbackLLM":
         logger.info(f"✅ LLM initialized (provider=local, model={model})")
         return llm
 
+    elif provider == "poolside":
+        api_key = os.environ.get("POOLSIDE_API_KEY")
+        model = os.environ.get("POOLSIDE_MODEL", "poolside/laguna-xs.2")
+        base_url = os.environ.get(
+            "POOLSIDE_BASE_URL", "https://inference.poolside.ai/v1"
+        )
+        inner = ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            base_url=base_url,
+            api_key=api_key,
+            default_headers={},
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": False},
+            },
+        )
+        llm = ThinkTagStrippingLLM(inner)
+        logger.info(f"✅ Poolside LLM initialized (model={model})")
+        return llm
+
     elif provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         model = os.environ.get("OPENAI_MODEL", "gpt-4o")
@@ -384,7 +404,7 @@ def create_llm(temperature: float = 0) -> "ChatOpenAI | MockLLM | FallbackLLM":
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER: {provider}. "
-            "Supported: cohere, openrouter, ollama, local, openai, azure, mock"
+            "Supported: cohere, openrouter, ollama, local, openai, azure, poolside, mock"
         )
 
 
@@ -432,6 +452,13 @@ def get_openai_client() -> Any:
             api_key="ollama",
             base_url=os.environ.get(
                 "OLLAMA_BASE_URL", "http://localhost:11434/v1"
+            ),
+        )
+    elif provider == "poolside":
+        return AsyncOpenAI(
+            api_key=os.environ.get("POOLSIDE_API_KEY"),
+            base_url=os.environ.get(
+                "POOLSIDE_BASE_URL", "https://inference.poolside.ai/v1"
             ),
         )
     elif provider == "openai":
