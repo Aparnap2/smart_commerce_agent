@@ -304,14 +304,37 @@ class MockSalesforceClient:
                 return response.json()
 
         # ── mock mode ─────────────────────────────────────────
-        # Check stored cases first
+        # Try lookup by internal ID in stored cases
         if case_id in self._cases_store:
             return self._cases_store[case_id].copy()
 
-        # Check if it matches a valid mock case pattern
+        # Try lookup by caseNumber in stored cases
+        for stored_case in self._cases_store.values():
+            if stored_case.get("caseNumber") == case_id:
+                return stored_case.copy()
+
+        # Check if it matches internal ID pattern: 500xxxxxx
         if case_id.startswith("500") and len(case_id) == 9:
             index = int(case_id[3:]) % len(_COMPANY_NAMES)
-            return self._build_mock_case(index)
+            case = self._build_mock_case(index)
+            self._cases_store[case["id"]] = case
+            return case.copy()
+
+        # Check if it matches caseNumber pattern: CAS-2026-NNNN
+        if case_id.startswith("CAS-"):
+            try:
+                num = int(case_id.rsplit("-", 1)[-1])
+                index = (num - 1) % len(_COMPANY_NAMES)
+                case = self._build_mock_case(index)
+                # Use the actual caseNumber from the request
+                stored_num = self._case_counter
+                case["caseNumber"] = f"CAS-2026-{num:04d}"
+                # Recalculate ID to match the expected pattern
+                case["id"] = f"500{index:06d}"
+                self._cases_store[case["id"]] = case
+                return case.copy()
+            except (ValueError, IndexError):
+                pass
 
         raise ValueError(f"Case not found: {case_id}")
 
@@ -337,8 +360,16 @@ class MockSalesforceClient:
                 return response.json()
 
         # ── mock mode ─────────────────────────────────────────
-        # Derive a consistent index from the account_id
-        index = abs(hash(account_id)) % len(_COMPANY_NAMES)
+        # Derive a deterministic index from the account_id
+        # Use acc-NNN => index N-1 to stay consistent with _build_mock_case
+        if account_id.startswith("acc-"):
+            try:
+                num = int(account_id.split("-")[1])
+                index = (num - 1) % len(_COMPANY_NAMES)
+            except (ValueError, IndexError):
+                index = 0
+        else:
+            index = abs(hash(account_id)) % len(_COMPANY_NAMES)
 
         return {
             "account": {
@@ -636,4 +667,47 @@ class MockSalesforceClient:
             "escalatedAt": now,
             "status": "Escalated",
             "priority": "High",
+        }
+
+    async def send_reply(
+        self, case_id: str, message: str, channel: str = "email"
+    ) -> dict[str, Any]:
+        """
+        Send a reply to the customer on an existing case.
+
+        Args:
+            case_id: The case ID to reply to
+            message: The reply message content
+            channel: Delivery channel ('email', 'portal', 'chat')
+
+        Returns:
+            Reply confirmation dict
+
+        Raises:
+            ValueError: If case_id is unknown
+        """
+        if self.mode == "http":
+            payload: dict[str, str] = {"message": message, "channel": channel}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/cases/{case_id}/reply", json=payload
+                )
+                if response.status_code == 404:
+                    raise ValueError(f"Case not found: {case_id}")
+                response.raise_for_status()
+                return response.json()
+
+        # ── mock mode ─────────────────────────────────────────
+        try:
+            await self.get_case_details(case_id)
+        except ValueError:
+            raise ValueError(f"Case not found: {case_id}")
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        return {
+            "caseId": case_id,
+            "channel": channel,
+            "sentAt": now,
+            "status": "delivered",
         }

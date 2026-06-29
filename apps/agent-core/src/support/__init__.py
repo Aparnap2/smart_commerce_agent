@@ -10,6 +10,9 @@ from .tools import (
     create_case,
     update_case,
     escalate_case,
+    send_case_reply,
+    proactive_scan,
+    approve_fix,
 )
 
 SUPPORT_TOOLS = [
@@ -22,6 +25,9 @@ SUPPORT_TOOLS = [
     create_case,
     update_case,
     escalate_case,
+    send_case_reply,
+    proactive_scan,
+    approve_fix,
 ]
 
 __all__ = ["SUPPORT_TOOLS"] + [t.name for t in SUPPORT_TOOLS]
