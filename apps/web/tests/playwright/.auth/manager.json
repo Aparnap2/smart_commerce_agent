@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiI3NDJhM2U3Ni0wYzU4LTRhMmQtYjNmYi1lMDAzZWJiNDJjMjQiLCJlbWFpbCI6Im1hbmFnZXJAdGVjaHRyZW5kLmNvbSIsInJvbGUiOiJTSE9QUEVSIiwiaWF0IjoxNzc4OTk5NDQzLCJleHAiOjE3Nzk2MDQyNDN9.3d2lRPFVvx49zqxqZfGkw1YOTQ2SZPftejsELf9qVxY",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1779604243.467166,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:3001",
+      "localStorage": [
+        {
+          "name": "nextauth.message",
+          "value": "{\"event\":\"session\",\"data\":{\"trigger\":\"getSession\"},\"timestamp\":1778999443}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "supportpilot-phase1",
+  "name": "SupportPilot Phase 1 — Scaffold",
+  "status": "active",
+  "objective": "Set up support infrastructure alongside existing procurement code: additive SQL migration, mock Salesforce client, support RBAC roles, and a /support route workspace",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/web/lib/auth/rbac.ts",
+    "apps/web/lib/auth/jwt.ts",
+    "apps/web/middleware.ts",
+    "apps/web/app/(chat)/page.tsx",
+    "apps/web/components/shell/Shell.tsx",
+    "apps/web/components/shell/Rail.tsx",
+    "apps/agent-core/migrations/005_add_pricing_flag_columns.sql",
+    "apps/agent-core/tests/conftest.py"
+  ],
+  "exit_criteria": [
+    "All 5 support tables exist after migration with correct FKs",
+    "MockSalesforceClient returns realistic data for all 9 methods",
+    "Support roles (SUPPORT_AGENT, TEAM_LEAD, SUPPORT_OPS, ADMIN) enforceable in middleware",
+    "Backward compatibility with existing B2B procurement roles verified",
+    "/support route renders support workspace with Shell/Rail, loading/error/empty states"
+  ],
+  "subtask_count": 4,
+  "completed_count": 0,
+  "created_at": "2026-05-28T14:00:00Z"
+}

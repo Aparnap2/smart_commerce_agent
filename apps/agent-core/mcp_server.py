@@ -13,7 +13,12 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
-from mcp.server.lifecycle import LifespanManager
+
+try:
+    from mcp.server.lifecycle import LifespanManager
+except ImportError:
+    # Newer mcp versions use different lifecycle
+    LifespanManager = None
 
 # Import our tools
 from src.db import get_pool, close_pool

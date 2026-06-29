@@ -53,3 +53,8 @@ next-env.d.ts
 *.lcov
 .next/
 .venv/
+
+# playwright auth state
+/tests/playwright/.auth/
+/playwright-report/
+/test-results/

@@ -114,6 +114,7 @@ export default function MerchantChatPage() {
             disabled={isLoading}
             className="flex-1 rounded-xl px-4 py-2.5 bg-zinc-800 text-zinc-100 placeholder-zinc-500 border border-zinc-700 focus:outline-none focus:border-purple-500 disabled:opacity-50 text-sm"
             aria-label="Merchant message input"
+            data-testid="chat-input"
           />
         </div>
       </div>

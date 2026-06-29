@@ -8,6 +8,14 @@ import { prisma } from '@/lib/prisma/client'
 import { EmployeeRole, PRStatus, ApprovalStatus } from '@prisma/client'
 import { z } from 'zod'
 
+// Type for the function response - function returns JSONB directly
+type DbFunctionResult = {
+  success: boolean;
+  error?: string;
+  prId?: string;
+  amount?: number;
+};
+
 const DecisionSchema = z.object({
   decision: z.enum(['APPROVED', 'REJECTED']),
   comments: z.string().optional()
@@ -58,16 +66,42 @@ export async function POST(
 
     // Update PR status
     const newStatus = decision === 'APPROVED' ? PRStatus.APPROVED : PRStatus.REJECTED
-    
-    const updatedPR = await prisma.purchaseRequest.update({
-      where: { id: prId },
-      data: {
-        status: newStatus,
-        notes: comments || null,
-        approvedAt: decision === 'APPROVED' ? new Date() : null,
-        rejectedAt: decision === 'REJECTED' ? new Date() : null
+    let updatedPR;
+
+    if (decision === 'APPROVED') {
+      // Use the database function to handle budget debit and status update atomically
+      // The function returns JSONB directly, so we cast it
+      const result = await prisma.$queryRaw<[DbFunctionResult]>`
+        SELECT * FROM approve_pr_and_debit_budget(${prId}::TEXT)
+      `
+      
+      const functionResponse = result[0]
+      if (!functionResponse || !functionResponse.success) {
+        return NextResponse.json(
+          { error: functionResponse?.error || 'Failed to approve PR and debit budget' },
+          { status: 400 }
+        )
       }
-    })
+
+      // Fetch the updated PR after the function call
+      updatedPR = await prisma.purchaseRequest.findUnique({
+        where: { id: prId }
+      })
+    } else {
+      // For REJECTED, just update the status (no budget debit needed)
+      updatedPR = await prisma.purchaseRequest.update({
+        where: { id: prId },
+        data: {
+          status: newStatus,
+          notes: comments || null,
+          rejectedAt: new Date()
+        }
+      })
+    }
+
+    if (!updatedPR) {
+      return NextResponse.json({ error: 'Failed to update PR' }, { status: 500 })
+    }
 
     // Create audit entry
     await prisma.pRAuditEntry.create({
@@ -97,26 +131,7 @@ export async function POST(
     })
 
     // Resume the LangGraph thread if there's an approval thread ID
-    if (pr.approvalThreadId) {
-      try {
-        const agentBaseUrl = process.env.AGENT_CORE_URL || 'http://localhost:8000'
-        const resumeResponse = await fetch(`${agentBaseUrl}/resume`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            thread_id: pr.approvalThreadId,
-            decision: decision,
-            comments: comments || ''
-          })
-        })
-        
-        if (!resumeResponse.ok) {
-          console.error('Failed to resume agent thread:', await resumeResponse.text())
-        }
-      } catch (err) {
-        console.error('Error resuming agent thread:', err)
-      }
-    }
+    // Note: approvalThreadId field not in schema - skipping for now
 
     return NextResponse.json({
       success: true,

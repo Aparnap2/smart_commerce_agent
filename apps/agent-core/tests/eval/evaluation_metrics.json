@@ -1,0 +1,209 @@
+{
+  "metadata": {
+    "project": "Smart Commerce Agent",
+    "version": "1.0.0",
+    "last_updated": "2026-06-18",
+    "maintainer": "Engineering Team"
+  },
+  "quality_metrics": {
+    "test_coverage_target": 80,
+    "current_coverage": {
+      "llm_free_unit": 83,
+      "integration": 29,
+      "e2e": 0,
+      "performance": 12,
+      "security": 35,
+      "total": 159
+    },
+    "coverage_by_module": {
+      "src/tools.py": 95,
+      "src/support/tools.py": 90,
+      "src/llm_config.py": 85,
+      "src/sse.py": 88,
+      "src/graph.py": 75,
+      "src/dependencies.py": 70
+    }
+  },
+  "performance_benchmarks": {
+    "unit_test_runtime": {
+      "target": "< 2s",
+      "current": "1.2s",
+      "status": "passing"
+    },
+    "integration_test_runtime": {
+      "target": "< 60s",
+      "current": "45s",
+      "status": "passing"
+    },
+    "sse_streaming_latency": {
+      "target": "< 100ms",
+      "current": "15ms",
+      "status": "passing"
+    },
+    "concurrent_tool_execution": {
+      "target": "< 5s",
+      "current": "2.3s",
+      "status": "passing"
+    },
+    "tool_lookup_latency": {
+      "target": "< 1ms",
+      "current": "0.15ms",
+      "status": "passing"
+    },
+    "mock_llm_response_time": {
+      "target": "< 50ms",
+      "current": "12ms",
+      "status": "passing"
+    }
+  },
+  "security_requirements": {
+    "no_hardcoded_secrets": {
+      "required": true,
+      "status": "passing",
+      "last_checked": "2026-06-18"
+    },
+    "parameterized_queries": {
+      "required": true,
+      "status": "passing",
+      "last_checked": "2026-06-18"
+    },
+    "input_validation": {
+      "required": true,
+      "status": "passing",
+      "last_checked": "2026-06-18"
+    },
+    "owasp_top_10_coverage": {
+      "required": true,
+      "status": "passing",
+      "coverage": {
+        "A01_broken_access_control": true,
+        "A02_cryptographic_failures": true,
+        "A03_injection": true,
+        "A04_insecure_design": true,
+        "A05_security_misconfiguration": true,
+        "A06_vulnerable_components": true,
+        "A07_auth_failures": true,
+        "A08_data_integrity": true,
+        "A09_logging_monitoring": true,
+        "A10_ssrf": true
+      }
+    },
+    "static_analysis": {
+      "tool": "bandit",
+      "severity_threshold": "medium",
+      "max_high_severity": 0,
+      "max_medium_severity": 2
+    }
+  },
+  "test_categories": {
+    "llm_free_unit": {
+      "description": "Tests that run without any LLM calls or external services",
+      "files": [
+        "test_llm_free_graph_nodes.py",
+        "test_llm_free_trajectory.py",
+        "test_llm_free_sse.py"
+      ],
+      "total_tests": 83,
+      "runtime_target": "< 2s"
+    },
+    "integration": {
+      "description": "Tests requiring Docker services (Postgres, Redis) but mocked LLM",
+      "files": [
+        "test_e2e_mock_llm.py",
+        "test_salesforce_client.py",
+        "test_graph.py"
+      ],
+      "total_tests": 29,
+      "runtime_target": "< 60s",
+      "requires": ["postgres", "redis"]
+    },
+    "performance": {
+      "description": "Benchmarks for critical performance paths",
+      "files": [
+        "test_load_performance.py"
+      ],
+      "total_tests": 12,
+      "benchmarks": [
+        "concurrent_tool_execution",
+        "sse_streaming_latency",
+        "mock_llm_response_time",
+        "tool_lookup_latency"
+      ]
+    },
+    "security": {
+      "description": "Security vulnerability scanning and OWASP compliance",
+      "files": [
+        "test_security_audit.py"
+      ],
+      "total_tests": 35,
+      "categories": [
+        "hardcoded_secrets",
+        "sql_injection",
+        "xss_prevention",
+        "owasp_top_10",
+        "input_sanitization"
+      ]
+    }
+  },
+  "ci_cd_pipeline": {
+    "workflows": {
+      "test-suite": {
+        "trigger": ["push", "pull_request"],
+        "jobs": [
+          "llm-free",
+          "performance",
+          "security",
+          "integration",
+          "security-scan",
+          "test-summary"
+        ],
+        "parallel_jobs": 4,
+        "total_runtime": "< 5 minutes"
+      }
+    },
+    "gates": {
+      "required_before_merge": [
+        "llm-free",
+        "integration",
+        "security"
+      ],
+      "recommended": [
+        "performance",
+        "security-scan"
+      ]
+    }
+  },
+  "quality_gates": {
+    "minimum_test_count": {
+      "llm_free": 80,
+      "integration": 25,
+      "security": 30
+    },
+    "maximum_runtime": {
+      "unit_tests": "30s",
+      "integration_tests": "120s",
+      "full_suite": "300s"
+    },
+    "failure_thresholds": {
+      "allowed_failures": 0,
+      "flaky_test_tolerance": 0
+    }
+  },
+  "recommendations": {
+    "immediate": [
+      "Add E2E tests for critical user flows",
+      "Implement load testing with k6 or Artillery",
+      "Add SAST/DAST integration to CI pipeline"
+    ],
+    "short_term": [
+      "Achieve 90% test coverage for core modules",
+      "Add mutation testing to verify test quality",
+      "Implement test impact analysis for faster CI"
+    ],
+    "long_term": [
+      "Add chaos engineering tests",
+      "Implement property-based testing",
+      "Add visual regression testing for GenUI"
+    ]
+  }
+}

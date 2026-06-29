@@ -1,0 +1,46 @@
+{
+  "id": "supportpilot-phase1-02",
+  "seq": "02",
+  "title": "Mock Salesforce Client — Python package with 9 methods + tests",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-05-28T00:00:00Z",
+  "completed_at": "2026-05-28T00:00:00Z",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/src/tools.py",
+    "apps/agent-core/src/__init__.py",
+    "apps/agent-core/tests/conftest.py"
+  ],
+  "acceptance_criteria": [
+    "TDD: test file written BEFORE implementation",
+    "Package apps/agent-core/src/salesforce/ exists with __init__.py exporting MockSalesforceClient",
+    "apps/agent-core/src/salesforce/client.py contains MockSalesforceClient class",
+    "search_cases(query, filters) → returns list of case dicts with realistic mock data",
+    "get_case_details(case_id) → returns single case dict with all expected fields",
+    "get_customer_context(account_id) → returns account + contact info dict",
+    "search_knowledge_base(query) → returns KB article list with content excerpts",
+    "search_similar_tickets(query) → returns past case list with resolution info",
+    "draft_reply(case_id, context) → returns realistic draft reply string (not empty)",
+    "create_case(subject, description, priority, account_id) → returns new case with generated ID",
+    "update_case(case_id, fields) → returns updated case with modified fields",
+    "escalate_case(case_id, reason) → returns escalation status dict",
+    "Each method accepts mode parameter: 'mock' | 'live' for future real SF integration",
+    "Class constructor accepts optional api_key, instance_url for future live mode",
+    "Tests: all 9 methods return correct response structures, mock data realism, mode switching, error handling (bad case_id returns error), async operation",
+    "All pytest tests pass — zero existing functionality changes"
+  ],
+  "deliverables": [
+    "apps/agent-core/src/salesforce/__init__.py",
+    "apps/agent-core/src/salesforce/client.py",
+    "apps/agent-core/tests/test_salesforce_client.py"
+  ],
+  "bounded_context": "support-infrastructure",
+  "module": "@agent-core/salesforce"
+}

@@ -1,0 +1,50 @@
+{
+  "id": "supportpilot-phase2-01",
+  "seq": "01",
+  "title": "Create support tools Python module with all 9 @tool functions",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-05-28T00:00:00Z"
+  "depends_on": [],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/src/tools.py",
+    "apps/agent-core/src/salesforce/client.py",
+    "apps/agent-core/src/salesforce/__init__.py"
+  ],
+  "acceptance_criteria": [
+    "apps/agent-core/src/support/__init__.py exists and exports SUPPORT_TOOLS list and all 9 tool functions",
+    "apps/agent-core/src/support/tools.py contains exactly 9 @tool functions in priority order",
+    "Each tool uses Pydantic input schema + instructor-extracted output + MockSalesforceClient call + GenUI __ui__ payload",
+    "Priority order enforced: 1.search_salesforce_cases → 2.get_case_details → 3.get_customer_context → 4.search_knowledge_base → 5.search_similar_tickets → 6.draft_case_reply → 7.create_case → 8.update_case → 9.escalate_case",
+    "Each tool returns JSON string with structured data AND __ui__ key matching the GenUI contract",
+    "__ui__ payload names and props match the specified contract table exactly",
+    "draft_case_reply uses instructor + Pydantic for structured output generation",
+    "escalate_case includes HITL confirmation step and role-check",
+    "SUPPORT_TOOLS list exported and importable from apps/agent-core/src/support/__init__.py",
+    "Tools can be imported without side effects (no top-level module execution)"
+  ],
+  "deliverables": [
+    "apps/agent-core/src/support/__init__.py",
+    "apps/agent-core/src/support/tools.py"
+  ],
+  "bounded_context": "customer-support",
+  "module": "apps/agent-core/src/support",
+  "contracts": [
+    {
+      "type": "interface",
+      "name": "MockSalesforceClient",
+      "path": "apps/agent-core/src/salesforce/client.py",
+      "status": "implemented",
+      "description": "9 async methods corresponding to each @tool"
+    }
+  ],
+  "design_components": [
+    "apps/agent-core/src/support/tools.py — design each tool following existing procurement tool patterns (Pydantic → client → GenUI)"
+  ]
+}

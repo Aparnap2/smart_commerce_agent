@@ -1,0 +1,37 @@
+{
+  "id": "supportpilot-phase1-01",
+  "seq": "01",
+  "title": "Support Schema Migration — additive SQL + TDD tests",
+  "status": "pending",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/migrations/005_add_pricing_flag_columns.sql",
+    "apps/agent-core/tests/conftest.py",
+    "apps/agent-core/src/db.py",
+    "apps/agent-core/src/models.py"
+  ],
+  "acceptance_criteria": [
+    "TDD: test file written BEFORE migration SQL",
+    "File apps/agent-core/migrations/006_add_support_tables.sql exists",
+    "SupportConversation table: id UUID PK, title TEXT, status TEXT DEFAULT 'open', user_id UUID FK→users, salesforce_case_id TEXT, created_at/updated_at TIMESTAMPTZ",
+    "CaseReference table: id UUID PK, conversation_id UUID FK→SupportConversation, salesforce_case_id TEXT NOT NULL, case_number TEXT, subject TEXT, status TEXT, priority TEXT, owner TEXT, account_id TEXT, contact_id TEXT, last_synced_at TIMESTAMPTZ",
+    "EscalationRequest table: id UUID PK, case_id UUID FK→CaseReference, reason TEXT NOT NULL, requested_action TEXT, status TEXT DEFAULT 'pending', requested_by UUID FK→users, decided_by UUID, decision TEXT, decided_at TIMESTAMPTZ, created_at TIMESTAMPTZ",
+    "KnowledgeArticle table: id UUID PK, title TEXT NOT NULL, content TEXT NOT NULL, category TEXT, salesforce_article_id TEXT, embedding vector(1536), created_at TIMESTAMPTZ",
+    "SlaPolicy table: id UUID PK, name TEXT, priority TEXT, response_hours INT, resolution_hours INT, created_at TIMESTAMPTZ",
+    "Test covers: all tables exist after migration, column types and constraints, FK relationships, insert+read from each table, rollback behavior",
+    "All pytest tests pass — zero existing functionality changes",
+    "SQL follows same style as 005 migration (COMMENT ON, IF NOT EXISTS)"
+  ],
+  "deliverables": [
+    "apps/agent-core/migrations/006_add_support_tables.sql",
+    "apps/agent-core/tests/test_support_migration.py"
+  ],
+  "bounded_context": "support-infrastructure",
+  "module": "@agent-core/migrations"
+}

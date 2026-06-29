@@ -1,0 +1,55 @@
+{
+  "id": "supportpilot-phase2",
+  "name": "SupportPilot Phase 2 — Core Salesforce Tools",
+  "status": "active",
+  "objective": "Implement 9 Salesforce LangChain @tools with strict TDD, GenUI payloads, graph integration, frontend stubs, and integration tests",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md"
+  ],
+  "reference_files": [
+    "apps/agent-core/src/tools.py",
+    "apps/agent-core/src/salesforce/client.py",
+    "apps/agent-core/src/graph.py",
+    "apps/agent-core/src/dependencies.py",
+    "apps/agent-core/tests/conftest.py",
+    "apps/web/lib/ui-event-types.ts",
+    "apps/web/components/genui/index.ts",
+    "apps/web/app/(chat)/support/page.tsx"
+  ],
+  "exit_criteria": [
+    "All 9 LangChain @tool functions implemented with Pydantic I/O and GenUI __ui__ payloads",
+    "Each tool has a passing unit test with verified response structure",
+    "Graph integration: SUPPORT_TOOLS registered, SupportPilot system prompt section added, role-based filtering working",
+    "9 GenUI stub components created and registered in ui-event-types.ts",
+    "Integration test gated behind INTEGRATION_TEST=true environment variable",
+    "All tests passing: pytest apps/agent-core/tests/test_support_tools.py",
+    "Tool implementation priority order maintained: read → gen → mutation → HITL"
+  ],
+  "subtask_count": 5,
+  "completed_count": 0,
+  "created_at": "2026-05-28T00:00:00Z",
+  "bounded_context": "customer-support",
+  "module": "apps/agent-core/src/support",
+  "vertical_slice": "salesforce-tooling",
+  "contracts": [
+    {
+      "type": "interface",
+      "name": "MockSalesforceClient",
+      "path": "apps/agent-core/src/salesforce/client.py",
+      "status": "implemented"
+    },
+    {
+      "type": "genui",
+      "name": "SupportGenUIPayloads",
+      "path": "apps/web/lib/ui-event-types.ts",
+      "status": "pending"
+    }
+  ],
+  "design_components": [
+    "apps/agent-core/src/support/tools.py",
+    "apps/agent-core/src/support/__init__.py"
+  ],
+  "related_adrs": [],
+  "release_slice": "v2.0.0"
+}

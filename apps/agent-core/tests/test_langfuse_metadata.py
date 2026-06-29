@@ -21,7 +21,7 @@ class TestLangfuseMetadata:
         """Missing config returns default app only."""
         result = get_langfuse_metadata()
         
-        assert result == {"app": "procureai"}
+        assert result == {"app": "supportpilot"}
         assert "app" in result
 
     def test_config_with_department_id(self):
@@ -36,7 +36,7 @@ class TestLangfuseMetadata:
         
         assert result["department_id"] == "dept-123"
         assert result["role"] == "buyer"
-        assert result["app"] == "procureai"
+        assert result["app"] == "supportpilot"
 
     def test_config_with_only_role(self):
         """Config with only role returns role and defaults."""
@@ -49,7 +49,7 @@ class TestLangfuseMetadata:
         
         assert result["role"] == "approver"
         assert result["department_id"] == "unknown"
-        assert result["app"] == "procureai"
+        assert result["app"] == "supportpilot"
 
     def test_empty_configurable_returns_defaults(self):
         """Empty configurable returns defaults."""
@@ -58,7 +58,7 @@ class TestLangfuseMetadata:
         
         assert result["department_id"] == "unknown"
         assert result["role"] == "unknown"
-        assert result["app"] == "procureai"
+        assert result["app"] == "supportpilot"
 
     def test_missing_configurable_key_returns_defaults(self):
         """Missing configurable key returns defaults."""
@@ -67,13 +67,13 @@ class TestLangfuseMetadata:
         
         assert result["department_id"] == "unknown"
         assert result["role"] == "unknown"
-        assert result["app"] == "procureai"
+        assert result["app"] == "supportpilot"
 
     def test_non_dict_config_returns_default_app(self):
         """Non-dict config returns default app."""
         result = get_langfuse_metadata("not-a-dict")
         
-        assert result == {"app": "procureai"}
+        assert result == {"app": "supportpilot"}
 
 
 class TestLangfuseHealthCheck:
@@ -191,7 +191,7 @@ class TestLangfuseIntegration:
         # Values are correct
         assert metadata["department_id"] == "dept-integration"
         assert metadata["role"] == "admin"
-        assert metadata["app"] == "procureai"
+        assert metadata["app"] == "supportpilot"
 
     @pytest.mark.asyncio
     async def test_metadata_fields_are_strings(self):

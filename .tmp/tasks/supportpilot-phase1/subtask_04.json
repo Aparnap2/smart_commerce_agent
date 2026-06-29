@@ -1,0 +1,48 @@
+{
+  "id": "supportpilot-phase1-04",
+  "seq": "04",
+  "title": "/support Route — support workspace page with layout extraction",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-05-28T00:00:00Z",
+  "completed_at": "2026-05-28T00:00:00Z",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "OpenFrontendSpecialist",
+  "context_files": [
+    ".opencode/context/core/standards/code-quality.md",
+    ".opencode/context/core/standards/security-patterns.md",
+    ".opencode/context/ui/web/ui-styling-standards.md",
+    ".opencode/context/core/workflows/design-iteration-overview.md"
+  ],
+  "reference_files": [
+    "apps/web/app/(chat)/page.tsx",
+    "apps/web/components/shell/Shell.tsx",
+    "apps/web/components/shell/Rail.tsx",
+    "apps/web/app/(admin)/layout.tsx",
+    "apps/web/app/api/agent/route.ts"
+  ],
+  "acceptance_criteria": [
+    "apps/web/app/(chat)/layout.tsx created (extracted from existing (chat)/page.tsx pattern)",
+    "apps/web/app/(chat)/support/page.tsx created as 'use client' component",
+    "Header shows 'SupportPilot' with role badge (fetched from /api/agent/session)",
+    "Placeholder sections rendered: 'Case Search', 'Customer Context', 'Reply Draft'",
+    "Uses existing Shell component and Rail component",
+    "Fetches user info from /api/agent/session API endpoint",
+    "Handles loading state (skeleton/spinner while fetching session)",
+    "Handles error state (error message if session fetch fails)",
+    "Handles empty state (no cases yet messaging)",
+    "Responsive layout using Tailwind (matches existing pattern from chat page)",
+    "Navigates between 'Procurement Chat' and 'Support Workspace' via tab/links in (chat)/page.tsx",
+    "Existing (chat)/page.tsx navigation tab updated with working link to /support",
+    "All TypeScript compiles with no errors (tsc --noEmit passes)",
+    "Zero existing functionality changes in procurement chat"
+  ],
+  "deliverables": [
+    "apps/web/app/(chat)/layout.tsx (new, extracted from page)",
+    "apps/web/app/(chat)/support/page.tsx (new)",
+    "apps/web/app/(chat)/page.tsx (modified — add navigation tab)"
+  ],
+  "bounded_context": "support-infrastructure",
+  "module": "@web/app"
+}
